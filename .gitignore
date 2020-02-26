@@ -1,0 +1,5 @@
+.stack-work/
+*~
+# generated files
+src/Lexer.hs
+src/Parser.hs

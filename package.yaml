@@ -1,0 +1,54 @@
+name:                greentext
+version:             0.1.0.0
+github:              "githubuser/greentext"
+license:             BSD3
+author:              "Yokodake"
+maintainer:          "ngyj@cinnabar.fr"
+copyright:           "2020 Yokodake"
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+- src/Lexer.x
+- src/Parser.y
+
+# Metadata used when publishing your package
+synopsis:            Greentext interpreter in haskell
+category:            Programming Language
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on GitHub at <https://github.com/yokodake/greentext#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+
+executables:
+  greentext-exe:
+    main:                Main.hs
+    source-dirs:         src
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - mtl
+    - haskeline
+    - transformers
+    - containers
+    - array
+    build-tools:
+    - happy
+    - alex
+
+tests:
+  greentext-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - greentext

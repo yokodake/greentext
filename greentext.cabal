@@ -1,0 +1,66 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.32.0.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 98fb3dafa8eba06ca2238c62e058618826e29de8e228a742540ab89f6dcaeac1
+
+name:           greentext
+version:        0.1.0.0
+synopsis:       Greentext interpreter in haskell
+description:    Please see the README on GitHub at <https://github.com/yokodake/greentext#readme>
+category:       Programming Language
+homepage:       https://github.com/githubuser/greentext#readme
+bug-reports:    https://github.com/githubuser/greentext/issues
+author:         Yokodake
+maintainer:     ngyj@cinnabar.fr
+copyright:      2020 Yokodake
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+    ChangeLog.md
+    src/Lexer.x
+    src/Parser.y
+
+source-repository head
+  type: git
+  location: https://github.com/githubuser/greentext
+
+executable greentext-exe
+  main-is: Main.hs
+  other-modules:
+      Lexer
+      Lexer
+      Parser
+      Parser
+      Paths_greentext
+  hs-source-dirs:
+      src
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-tools:
+      alex
+    , happy
+  build-depends:
+      array
+    , base >=4.7 && <5
+    , containers
+    , haskeline
+    , mtl
+    , transformers
+  default-language: Haskell2010
+
+test-suite greentext-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Paths_greentext
+  hs-source-dirs:
+      test
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.7 && <5
+    , greentext
+  default-language: Haskell2010
