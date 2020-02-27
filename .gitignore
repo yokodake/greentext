@@ -3,3 +3,4 @@
 # generated files
 src/Lexer.hs
 src/Parser.hs
+stack.yaml.lock
