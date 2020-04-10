@@ -17,31 +17,66 @@ $eol   = [\n]
 
 tokens :-
   -- Whitespace insenstive
-  $eol ;
   $white+ ;
 
   -- Comments
   "#".* ;
 
+  -- eol sensitive (?)
+  $eol { \_ -> EOL }
   -- Syntax
-  $digit+ { \s -> TokInt (read s) }
-  "."     { \_ -> TokDot }
-  \\      { \_ -> TokLam }
-  \(      { \_ -> TokLParen }
-  \)      { \_ -> TokRParen }
-  $alpha [$alpha $digit \_ \']* { \s -> TokSym s }
+  \(      { \_ -> LPAR }
+  \)      { \_ -> RPAR }
+  \,      { \_ -> COM }
+  \<      { \_ -> LT }
+  \>      { \_ -> GT }
+  ":^)"   { \_ -> TRUE }
+  ":^("   { \_ -> FALSE }
+  "is"    { \_ -> EQ }
+  "isn't" { \_ -> NEQ }
+  "and"   { \_ -> AND }
+  "or"    { \_ -> OR }
+  "like"  { \_ -> ASS }
+  "from"  { \_ -> FROM }
+  "to"    { \_ -> TO }
+  "by"    { \_ -> BY }
+  "wew"   { \_ -> RVAL}
+  ">inb4"     { \_ -> FOR }
+  ">implying" {\_ -> IF }
+  ">or"       {\_ -> ELSE }
+  ">mfw"      { \_ -> PRINT }
+  ">be"       { \_ -> DECL }
+  ">tfw"      { \_ -> RET }
+  ">wewlad"   { \_ -> FN }
+  ">wew"      { \_ -> CALL }
+  ">done"     { \_ -> ENDFOR }
+  ">be me"    { \_ -> MAIN }
+  ">done implying"    {\_ -> ENDIF }
+  ">thank mr skeltal" {\_ -> EXIT}
+  $digit+                       { \s -> INT (read s) }
+  -- @TODO floats
+  \" .* \"                      { \s -> STR (id s) } -- @TODO strip string
+  $alpha [$alpha $digit \_ \']* { \s -> SYM s }
+  [\+ \- \* \/ \%]              { \s -> OP s }
 
 
 
 {
 
-data Token = TokInt Int
-           | TokSym String
-           | TokDot
-           | TokLam
-           | TokLParen
-           | TokRParen
-           | TokEOF
+data Token = INT Int
+           | SYM String
+           | STR String
+           | OP String
+           | LPAR | RPAR | COM
+           | IF | ELSE | ENDIF
+           | FOR | FROM | TO | BY | ENDFOR
+           | TRUE | FALSE
+           | LT | GT | EQ | NEQ | LT | GT | LTE | GTE
+           | AND | OR
+           | DECL | ASS
+           | FN | RET | CALL | RVAL
+           | MAIN | EXIT
+           | EOL | EOF
            deriving (Eq, Show)
 
 scanTokens :: String -> Except String [Token]
