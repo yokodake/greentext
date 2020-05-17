@@ -4,8 +4,10 @@ module Lexer
   , scanTokens
   ) where
 
+import Prelude hiding (Ordering(..))
 -- import AST
 import Control.Monad.Except
+import Debug.Trace
 
 }
 
@@ -13,7 +15,7 @@ import Control.Monad.Except
 
 $digit = 0-9
 $alpha = [a-zA-Z]
-$eol   = [\n]
+$eol   = \n
 
 tokens :-
   -- Whitespace insenstive
@@ -23,13 +25,22 @@ tokens :-
   "#".* ;
 
   -- eol sensitive (?)
-  $eol { \_ -> EOL }
+  $eol+ { \_ -> EOL }
   -- Syntax
   \(      { \_ -> LPAR }
   \)      { \_ -> RPAR }
   \,      { \_ -> COM }
   \<      { \_ -> LT }
   \>      { \_ -> GT }
+  \+      { \_ -> PLUS }
+  \-      { \_ -> MINUS }
+  \*      { \_ -> MULT }
+  \/      { \_ -> DIV }
+  \%      { \_ -> MOD }
+  "<="    { \_ -> LTE }
+  ">="    { \_ -> GTE }
+  "=="    { \_ -> EQ }
+  "!="    { \_ -> NEQ }
   ":^)"   { \_ -> TRUE }
   ":^("   { \_ -> FALSE }
   "is"    { \_ -> EQ }
@@ -55,32 +66,38 @@ tokens :-
   ">thank mr skeltal" {\_ -> EXIT}
   $digit+                       { \s -> INT (read s) }
   -- @TODO floats
-  \" .* \"                      { \s -> STR (id s) } -- @TODO strip string
+  \" .* \"                      { \s -> STR (strip s) }
   $alpha [$alpha $digit \_ \']* { \s -> SYM s }
-  [\+ \- \* \/ \%]              { \s -> OP s }
 
 
 
 {
-
 data Token = INT Int
            | SYM String
            | STR String
-           | OP String
            | LPAR | RPAR | COM
            | IF | ELSE | ENDIF
            | FOR | FROM | TO | BY | ENDFOR
            | TRUE | FALSE
-           | LT | GT | EQ | NEQ | LT | GT | LTE | GTE
+           | LT | GT | LTE | GTE
            | AND | OR
+           | EQ | NEQ
+           | PLUS | MINUS | MULT | DIV | MOD
            | DECL | ASS
-           | FN | RET | CALL | RVAL
+           | FN | RET | CALL | PRINT | RVAL
            | MAIN | EXIT
            | EOL | EOF
            deriving (Eq, Show)
 
+strip :: String -> String
+strip ('"':xs) = go xs
+  where go ['"'] = []
+        go (x:xs)  = go xs
+
+alexEOF = EOF
+
 scanTokens :: String -> Except String [Token]
-scanTokens str = go ('\n', [], str)
+scanTokens str = go ('\0', [], str)
   where
     go :: AlexInput -> Except String [Token]
     go inp@(_,bs,str) =
@@ -89,7 +106,7 @@ scanTokens str = go ('\n', [], str)
         AlexError (_, _, str) -> throwError $ "Invalid lexeme: " <> str
         AlexSkip inp' len -> go inp'
         AlexToken inp' len act -> do
-          res <- go inp'
-          let rest = act (take len str)
-          return (rest:res)
+          let res = act (take len str)
+          rest <- go inp'
+          return (res:rest)
 }

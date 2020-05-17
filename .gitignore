@@ -1,6 +1,18 @@
-.stack-work/
+# .gitignore
+
+# editors
 *~
+\#*\#
+
 # generated files
 src/Lexer.hs
 src/Parser.hs
+
+# package managers
+.stack-work/
+dist-newstyle/
 stack.yaml.lock
+
+# profiling
+*.svg
+*.hp

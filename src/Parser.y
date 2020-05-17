@@ -1,16 +1,19 @@
 {
-module Parser ( parseExpr
+module Parser ( parseProgram
               , parseTokens
               , Expr (..)
               ) where
 
+import Prelude hiding (Ordering(..))
+
 import Lexer
+import Ast
 import Control.Monad.Except
 
 }
 
 -- Entry
-%name expr
+%name program
 
 -- lexer structure
 %tokentype { Token }
@@ -24,12 +27,16 @@ import Control.Monad.Except
   NUM  { INT $$ }
   VAR  { SYM $$ }
   STR  { STR $$ }
-  OP   { OP $$ }
   '('  { LPAR }
   ')'  { RPAR }
   ','  { COM }
+  '+'  { PLUS }
+  '-'  { MINUS }
+  '*'  { MULT }
+  '/'  { DIV }
+  '%'  { MOD }
   '<'  { LT }
-  '<'  { GT }
+  '>'  { GT }
   '<=' { LTE }
   '>=' { GTE }
   '==' { EQ }
@@ -47,50 +54,88 @@ import Control.Monad.Except
   'to'     { TO }
   'by'     { BY }
   'endfor' { ENDFOR }
-  'def'   { DEF }
+  'def'   { DECL }
   'fn'    { FN }
   'return'{ RET }
+  'rval'  { RVAL }
   'call'  { CALL }
   'main'  { main }
   'exit'  { EXIT }
+  'print' { PRINT }
   '\n'    { EOL }
+
+%nonassoc '==' '!='
+%left 'and' 'or'
+%nonassoc '<' '>' '<=' '>='
+%left '+' '-'
+%left '*' '/' '%'
 
 %%
 
-Program : Decls          { App $1 $2 }
+Program : Decls          { $1 }
 
-Decls : VarAss           { $1 }
-      | FunDec           { $1 }
-      | MainDec          { $1 }
+Decls : Decl            { [$1] }
+      | Decl '\n' Decls { $1:$3 }
 
+Decl : VarAss           { Var (vname $1) (vexp $1) }
+     | FunDec           { $1 }
+     | MainDec          { $1 }
+
+VarAss : 'def' Var ':=' Expr           { VAss $2 (Just $4) }
+VarAss : 'def' Var                     { VAss $2 Nothing }
 FunDec : 'fn' Var Formals '\n' Stmts   { Fun $2 $3 $5 }
-VarAss : 'def' Var ':=' Expr           { Ass $2 $4 }
 MainDec : 'main' '\n' Stmts            { Fun (sym "main") [] $3 }
 
-Stmts : Stmt             { }
-      | Stmt '\n' Stmts  { }
+Var : VAR { $1 }
+
+Stmts : Stmt             { [$1] }
+      | Stmt '\n' Stmts  { $1:$3 }
 
 Stmt : 'exit'         { Exit }
-     | VarDec         { $1 }
+     | VarAss         { Ass (vname $1) (vexp $1) }
      | Cond           { $1 }
      | For            { $1 }
      | While          { $1 }
+     | 'print'        { Print [] }
+     | 'print' Args   { Print $2 }
+     | Call           { $1 }
      | 'return' Expr  { Ret $2 }
 
-Expr : Literal
-     | Infix        { $2 }
+Literal : NUM     { LInt $1 }
+        | STR     { LStr $1 }
+        | 'true'  { LBoo True }
+        | 'false' { LBoo False }
+
+Expr : Literal      { Lit $1 }
+     | Infix        { $1 }
      | '(' Expr ')' { $2 }
+     | Var          { Ref $1 }
+     | 'rval'       { RVal }
 
-Infix : Expr OP Expr { Infix $2 $1 $3 }
+Infix : Expr 'and' Expr { Infix (sym "and") $1 $3 }
+      | Expr 'or' Expr  { Infix (sym "or") $1 $3 }
+      | Expr '<' Expr   { Infix (sym "<") $1 $3 }
+      | Expr '>' Expr   { Infix (sym ">") $1 $3 }
+      | Expr '<=' Expr  { Infix (sym "<=") $1 $3 }
+      | Expr '>=' Expr  { Infix (sym ">=") $1 $3 }
+      | Expr '==' Expr  { Infix (sym "==") $1 $3 }
+      | Expr '!=' Expr  { Infix (sym "!=") $1 $3 }
+      | Expr '+' Expr   { Infix (sym "+") $1 $3 }
+      | Expr '-' Expr   { Infix (sym "-") $1 $3 }
+      | Expr '*' Expr   { Infix (sym "*") $1 $3 }
+      | Expr '/' Expr   { Infix (sym "/") $1 $3 }
+      | Expr '%' Expr   { Infix (sym "%") $1 $3 }
 
-While : 'for' BExpr '\n' LBdy  { }
-For   : 'for' Var 'from' Expr 'to' Expr '\n' LBdy            {}
-      | 'for' Var 'from' Expr 'to' Expr 'by' Expr '\n' LBdy  {}
+While : 'for' Expr '\n' LBdy  { While $2 $4 }
+For   : 'for' Var 'from' Expr 'to' Expr '\n' LBdy            { For $2 $4 $6 Nothing $8 }
+      | 'for' Var 'from' Expr 'to' Expr 'by' Expr '\n' LBdy  { For $2 $4 $6 (Just $8) $10 }
 
 LBdy : Stmts '\n' 'endfor'     { $1 }
 
-Cond : 'if' BExpr '\n' Stmts '\n' 'endif' { }
-     | 'if' BExpr '\n' Stmts '\n' 'else' Stmts '\n' 'endif' { }
+Cond : 'if' Expr '\n' Stmts '\n' 'endif' { Cond $2 $4 Nothing }
+     | 'if' Expr '\n' Stmts '\n' 'else' Stmts '\n' 'endif' { Cond $2 $4 (Just $7)}
+
+Call : 'call' Var '(' Args ')' { Call $2 $4 }
 
 Args : Expr          { [$1] }
      | Expr ',' Args { $1:$3 }
@@ -100,23 +145,16 @@ Formals : '(' ')'      { [] }
 Pars : Var             { [$1] }
      | Var ',' Pars    { $1:$3}
 
-Call : 'call' Var '(' Args ')' { }
 
 {
-data Expr = App Expr Expr
-        | Lam String Expr
-        | Var String
-        | Lit Int
-        deriving (Eq, Show)
-
 parseError :: [Token] -> Except String a
 parseError (l:ls) = throwError $ "Parser error: " <> show ls
 parseError [] = throwError "Unexpected end of Input"
 
-parseExpr :: String -> Either String Expr
-parseExpr input = runExcept $ do
+parseProgram :: String -> Either String [Decl]
+parseProgram input = runExcept $ do
   tokenStream <- scanTokens input
-  expr tokenStream
+  program tokenStream
 
 parseTokens :: String -> Either String [Token]
 parseTokens = runExcept . scanTokens
