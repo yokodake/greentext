@@ -27,9 +27,10 @@ executable greentext
   main-is: Main.hs
   other-modules:
       Lexer
-      Parser
-      Ast
-      Gtc
+    , Parser
+    , Ast
+    , Gtc
+    , Code
   hs-source-dirs:
       src
   ghc-options: -threaded -prof -rtsopts -with-rtsopts=-N
@@ -39,11 +40,12 @@ executable greentext
   build-depends:
       array
     , base >=4.7 && <5
+    , bytestring
     , containers
+    , filepath
     , haskeline
     , mtl
     , transformers
-    , filepath
   default-language: Haskell2010
 
 test-suite greentext-test
