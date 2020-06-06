@@ -4,24 +4,22 @@
 {-# language BangPatterns #-}
 {-# language ScopedTypeVariables #-}
 {-# language NamedFieldPuns #-}
-module Code
-  ( init
-  , write
-  , disassemble
-  ) where
+module Code where
 
 import           Prelude hiding (init)
 
-import           Foreign (Ptr, Word8, Int32, Int64, Int16, Storable)
+import           Foreign (Ptr, Word8, Word16, Int32, Int64, Int16, Storable)
 import qualified Foreign as F
 import           GHC.IO (unsafePerformIO)
-import           Text.Printf
 
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as B
+import           Data.ByteString.Builder (Builder)
+import qualified Data.ByteString.Builder as B
+import qualified Data.ByteString.Lazy as L
 
 
--- = TODO
+-- == TODO
 --   - unboxed types and shit
 --   - unified load parameter abstracted over size for constants?
 --   - decide on address size
@@ -39,39 +37,16 @@ init = Chunk mempty mempty
 write :: Instr -> Chunk -> Chunk
 write i c@Chunk{code} = c{code=B.snoc code i}
 
+type Addr = Int16
 
-type Value = Word8
+-- | adress size of a constant value
+casize :: Int
+casize = sizeof @Addr
+
+
 -- | add a constant to the constants array
-addC :: Value -> Chunk -> Chunk
-addC v c@Chunk{constants} = c{constants=B.snoc constants v}
-
--- | print a chunk in human readable format
--- rewrite all of this: no String, a proper output stream, abstract more of it
-disassemble :: String -> Chunk -> String
-disassemble name c@Chunk{code} =
-  printf "==== %s ====\n" name <>
-  go 0 code
-  where
-    go i code
-      | i == B.length code = ""
-      | otherwise = case btoc $ code `B.index` i of
-                      Iret  -> showLine i Iret "" <> go (i + 1) code
-                      Ilit1 -> showLine i Ilit1 (showLit (code `B.index` i + 1) 1 c) <> go (i + 2) code
-                      Ilit4 -> showLine i Ilit4 (showLit (code `B.index` i + 1) 4 c) <> go (i + 2) code
-                      Ilit8 -> showLine i Ilit8 (showLit (code `B.index` i + 1) 8 c) <> go (i + 2) code
-
-
-showLine :: Int -> OpCode -> String -> String
-showLine i b rest = printf "%04x %-8s %s\n" i (show b) rest
-
-showLit :: Word8 -> Int -> Chunk -> String
-showLit addr size Chunk{constants} = (show' . B.take size . B.drop (fromIntegral addr)) constants
-  where
-    show' = case size of
-              8 -> show . decode_f64
-              4 -> show . decode_i32
-              1 -> show . decode_w8
-              _ -> ("???" <>) . show
+addC :: Marshal a => a -> Chunk -> Chunk
+addC v c@Chunk{constants} = c{constants=constants `B.append` encode v}
 
 -- = OPCODE
 type Instr = Word8
@@ -84,14 +59,56 @@ data OpCode = Iret
 
 ctob :: OpCode -> Instr
 ctob = fromIntegral . fromEnum
+
 btoc :: Instr -> OpCode
 btoc = toEnum . fromIntegral
 
+operandSize :: OpCode -> Int
+operandSize Iret = 0
+operandSize Ilit1 = casize
+operandSize Ilit4 = casize
+operandSize Ilit8 = casize
+
 -- == Marshalling
+class Marshal a where
+  encode :: a -> ByteString
+  encode = B.pack . encode'
+  encode' :: a -> [Word8]
+  decode :: ByteString -> a
+  decode = decode' . B.unpack
+  decode' :: [Word8] -> a
+  {-# MINIMAL encode', decode' #-}
+
+instance Marshal Double where
+  encode' = encode_f64'
+  decode' = decode_f64'
+instance Marshal Int32 where
+  encode' = encode_i32'
+  decode' = decode_i32'
+instance Marshal Word8 where
+  encode' = encode_w8'
+  decode' = decode_w8'
+instance Marshal Word16 where
+  encode' = encode_w16'
+  decode' = decode_w16'
+
+
 encode_w8 :: Word8 -> ByteString
+encode_w8' :: Word8 -> [Word8]
+encode_w16 :: Word16 -> ByteString
+encode_w16' :: Word16 -> [Word8]
 encode_w8 = B.singleton
+encode_w16 = B.pack . encode_w16'
+encode_w8' = pure
+encode_w16' !w = unsafePerformIO $ F.with w (\buf -> F.peekArray (sizeof @Word16) (castptr @Word8 buf))
 decode_w8 :: ByteString -> Word8
+decode_w8' :: [Word8] -> Word8
+decode_w16 :: ByteString -> Word16
+decode_w16' :: [Word8] -> Word16
 decode_w8 = B.head
+decode_w8' = head
+decode_w16 = decode_w16' . B.unpack
+decode_w16' ws = unsafePerformIO $ F.withArray ws (\buf -> F.peek (castptr @Word16 buf))
 
 encode_f32  :: Float -> ByteString
 encode_f32' :: Float -> [Word8]
@@ -133,9 +150,9 @@ decode_i64' :: [Word8] -> Int64
 decode_i16 = decode_i16' . B.unpack
 decode_i32 = decode_i32' . B.unpack
 decode_i64 = decode_i64' . B.unpack
-decode_i16' !ws = unsafePerformIO $ F.withArray ws (\buf -> F.peek (castptr @Int16 buf))
-decode_i32' !ws = unsafePerformIO $ F.withArray ws (\buf -> F.peek (castptr @Int32 buf))
-decode_i64' !ws = unsafePerformIO $ F.withArray ws (\buf -> F.peek (castptr @Int64 buf))
+decode_i16' ws = unsafePerformIO $ F.withArray ws (\buf -> F.peek (castptr @Int16 buf))
+decode_i32' ws = unsafePerformIO $ F.withArray ws (\buf -> F.peek (castptr @Int32 buf))
+decode_i64' ws = unsafePerformIO $ F.withArray ws (\buf -> F.peek (castptr @Int64 buf))
 
 -- * utilities
 -- | reverse the type variables so the first type applied arg is @b@

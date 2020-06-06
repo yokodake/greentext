@@ -31,6 +31,7 @@ executable greentext
     , Ast
     , Gtc
     , Code
+    , Debug
   hs-source-dirs:
       src
   ghc-options: -threaded -prof -rtsopts -with-rtsopts=-N
