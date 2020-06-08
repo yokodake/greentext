@@ -19,7 +19,7 @@ disassemble name c@Chunk{code} = output $ do
   string (printf "=== %s ===\n" name)
   go 0
   where
-    caddr i = decode_w16' [code `B.index` i + 1, code `B.index` i + 2]
+    caddr i = decode_w16' [code `B.index` (i + 1), code `B.index` (i + 2)]
 
     go i
       | i == B.length code = pure ()

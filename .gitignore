@@ -12,6 +12,7 @@ src/Parser.hs
 .stack-work/
 dist-newstyle/
 stack.yaml.lock
+dist/
 
 # profiling
 *.svg
