@@ -16,7 +16,7 @@ data Stmt = Exit
           | For Sym Expr Expr (Maybe Expr) [Stmt]
           | Cond Expr [Stmt] (Maybe [Stmt])
           | Call Sym [Expr]
-          | Ret Expr
+          | Ret (Maybe Expr)
           deriving (Eq, Show)
 
 data Expr = Lit LitV

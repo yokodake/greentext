@@ -24,13 +24,11 @@ disassemble name c@Chunk{code} = output $ do
     go i
       | i == B.length code = pure ()
       | otherwise = do
-          let oc = btoc $code `B.index` i
+          let oc = btoc $ code `B.index` i
           instPrefix i oc
           case oc of
-            Iret  -> pure ()
-            Ilit1 -> string (showLit (caddr i) 1 c)
-            Ilit4 -> string (showLit (caddr i) 4 c)
-            Ilit8 -> string (showLit (caddr i) 8 c)
+            _ | isLit oc -> string (showLit (caddr i) (valSize oc) c)
+            _ -> pure ()
           endl
           go (i + operandSize oc + 1)
 

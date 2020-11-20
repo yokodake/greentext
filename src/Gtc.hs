@@ -2,7 +2,7 @@ module Gtc where
 
 import System.FilePath
 
--- | eval environment/context and other stuff
+-- | Greentext compiler envrionment, context and other stuff
 data GtcEnv =
   GtcEnv { flags :: Flags
          -- ^ settings & cmdline passed flags

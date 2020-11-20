@@ -99,7 +99,10 @@ Stmt : 'exit'         { Exit }
      | 'print'        { Print [] }
      | 'print' Args   { Print $2 }
      | Call           { $1 }
-     | 'return' Expr  { Ret $2 }
+     | Return         { $1 }
+
+Return : 'return' { Ret Nothing }
+       | 'return' Expr { Ret (Just $2) }
 
 Literal : NUM     { LInt $1 }
         | STR     { LStr $1 }

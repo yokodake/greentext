@@ -51,11 +51,48 @@ addC v c@Chunk{constants} = c{constants=constants `B.append` encode v}
 -- = OPCODE
 type Instr = Word8
 
-data OpCode = Iret
-            | Ilit1 -- ^ 1 byte,  constant bool
-            | Ilit4 -- ^ 4 bytes, constant signed integer
-            | Ilit8 -- ^ 8 bytes, constant double
-            deriving (Show, Enum)
+
+data OpCode = Iret    -- ^ return form function
+            | Irettop -- ^ return top of the stack
+            | Ilit1   -- ^ 1 byte,  constant bool
+            | Ilit4   -- ^ 4 bytes, constant signed integer
+            | Ilit8   -- ^ 8 bytes, constant double
+            | Iand    -- ^ infix operator `and`
+            | Ior     -- ^ infix operator `or`
+            | Igt     -- ^ infix operator `>`
+            | Ige     -- ^ infix operator `>=`
+            | Ilt     -- ^ infix operator `<`
+            | Ile     -- ^ infix operator `<=`
+            | Ieq     -- ^ infix operator `==`
+            | Ineq    -- ^ infix operator `!=`
+            | Iadd    -- ^ infix operator `+`
+            | Imin    -- ^ infix operator `-`
+            | Imul    -- ^ infix operator `*`
+            | Idiv    -- ^ infix operator `/`
+            | Imod    -- ^ infix operator `%`
+            deriving (Enum)
+
+instance Show OpCode where
+  show x = case x of
+    Iret    -> "RET"
+    Irettop -> "RET#"
+    Ilit1   -> "LIT1"
+    Ilit4   -> "LIT4"
+    Ilit8   -> "LIT8"
+    Iand    -> "OP_and"
+    Ior     -> "OP_or"
+    Igt     -> "OP_>"
+    Ige     -> "OP_>="
+    Ilt     -> "OP_<"
+    Ile     -> "OP_<="
+    Ieq     -> "OP_=="
+    Ineq    -> "OP_!="
+    Iadd    -> "OP_+"
+    Imin    -> "OP_-"
+    Imul    -> "OP_*"
+    Idiv    -> "OP_/"
+    Imod    -> "OP_%"
+
 
 ctob :: OpCode -> Instr
 ctob = fromIntegral . fromEnum
@@ -68,6 +105,18 @@ operandSize Iret = 0
 operandSize Ilit1 = casize
 operandSize Ilit4 = casize
 operandSize Ilit8 = casize
+
+valSize :: OpCode -> Int
+valSize Ilit1 = 1
+valSize Ilit4 = 4
+valSize Ilit8 = 8
+valSize _ = 0
+
+isLit :: OpCode -> Bool
+isLit Ilit1 = True
+isLit Ilit4 = True
+isLit Ilit8 = True
+isLit _     = False
 
 -- == Marshalling
 class Marshal a where
