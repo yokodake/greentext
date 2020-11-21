@@ -52,11 +52,18 @@ addC v c@Chunk{constants} = c{constants=constants `B.append` encode v}
 type Instr = Word8
 
 
-data OpCode = Iret    -- ^ return form function
+data OpCode = Ipop     -- ^ pop value from stack
+
+            | Iret    -- ^ return form function
             | Irettop -- ^ return top of the stack
+            | IloadRet -- ^ push return value on stack
+            | Iload    -- ^ push slot (variables) on stack
+            | Istore   -- ^ put top of stack in a slot (Var)
+
             | Ilit1   -- ^ 1 byte,  constant bool
             | Ilit4   -- ^ 4 bytes, constant signed integer
             | Ilit8   -- ^ 8 bytes, constant double
+
             | Iand    -- ^ infix operator `and`
             | Ior     -- ^ infix operator `or`
             | Igt     -- ^ infix operator `>`

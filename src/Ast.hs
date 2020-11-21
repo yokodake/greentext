@@ -2,9 +2,6 @@ module Ast where
 
 type Program = [Decl]
 
-data VAss = VAss { vname :: Sym, vexp :: (Maybe Expr) }
-          deriving (Eq, Show)
-
 data Decl = Var Sym (Maybe Expr)
           | Fun Sym [String] [Stmt]
           deriving (Eq, Show)
@@ -25,10 +22,17 @@ data Expr = Lit LitV
           | Infix String Expr Expr
           deriving (Eq, Show)
 
+-- | @NOTE Can we use GADTs here?
 data LitV = LStr String
           | LBoo Bool
           | LInt Int
           deriving (Eq, Show)
+
+-- | helper in the parser so we can parse @Var@ and @Ass@ with same rule.
+--   this means that this node never occurs in the AST!
+data VAss = VAss { vname :: Sym, vexp :: (Maybe Expr) }
+          deriving (Eq, Show)
+
 
 -- @TODO Symbols
 type Sym = String
