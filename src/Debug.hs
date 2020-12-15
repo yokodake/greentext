@@ -1,4 +1,5 @@
-{-# language NamedFieldPuns #-}
+{-# LANGUAGE NamedFieldPuns
+           , TypeApplications #-}
 module Debug where
 
 import           Code

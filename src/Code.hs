@@ -4,6 +4,7 @@
 {-# language BangPatterns #-}
 {-# language ScopedTypeVariables #-}
 {-# language NamedFieldPuns #-}
+{-# language DerivingVia #-}
 module Code where
 
 import           Prelude hiding (init)
@@ -14,9 +15,6 @@ import           GHC.IO (unsafePerformIO)
 
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as B
-import           Data.ByteString.Builder (Builder)
-import qualified Data.ByteString.Builder as B
-import qualified Data.ByteString.Lazy as L
 
 
 -- == TODO
@@ -50,12 +48,18 @@ addC v c@Chunk{constants} = c{constants=constants `B.append` encode v}
 
 -- = OPCODE
 type Instr = Word8
+-- | instr. addr
+newtype IAddr = MkIAddr Word16
+  deriving Num via Word16
+-- | Lit. addr in static mem.
+newtype LAddr = MkLAddr Word16
+  deriving Num via Word16
 
 
 data OpCode = Ipop     -- ^ pop value from stack
 
-            | Iret    -- ^ return form function
-            | Irettop -- ^ return top of the stack
+            | Iret     -- ^ return form function
+            | Irettop  -- ^ return top of the stack
             | IloadRet -- ^ push return value on stack
             | Iload    -- ^ push slot (variables) on stack
             | Istore   -- ^ put top of stack in a slot (Var)
@@ -77,6 +81,8 @@ data OpCode = Ipop     -- ^ pop value from stack
             | Imul    -- ^ infix operator `*`
             | Idiv    -- ^ infix operator `/`
             | Imod    -- ^ infix operator `%`
+
+            | Iexit    -- ^ exit program
             deriving (Enum)
 
 instance Show OpCode where
@@ -101,24 +107,29 @@ instance Show OpCode where
     Imod    -> "OP_%"
 
 
+-- | code to byte
 ctob :: OpCode -> Instr
 ctob = fromIntegral . fromEnum
 
+-- | byte to code
 btoc :: Instr -> OpCode
 btoc = toEnum . fromIntegral
 
+-- | get size of the instr's operand in bytes
 operandSize :: OpCode -> Int
 operandSize Iret = 0
 operandSize Ilit1 = casize
 operandSize Ilit4 = casize
 operandSize Ilit8 = casize
 
+-- | size of the value
 valSize :: OpCode -> Int
 valSize Ilit1 = 1
 valSize Ilit4 = 4
 valSize Ilit8 = 8
 valSize _ = 0
 
+-- | is a Literal
 isLit :: OpCode -> Bool
 isLit Ilit1 = True
 isLit Ilit4 = True
@@ -156,7 +167,7 @@ encode_w16' :: Word16 -> [Word8]
 encode_w8 = B.singleton
 encode_w16 = B.pack . encode_w16'
 encode_w8' = pure
-encode_w16' !w = unsafePerformIO $ F.with w (\buf -> F.peekArray (sizeof @Word16) (castptr @Word8 buf))
+encode_w16' !w = unsafePerformIO $ F.with w (F.peekArray (sizeof @Word16) . castptr @Word8)
 decode_w8 :: ByteString -> Word8
 decode_w8' :: [Word8] -> Word8
 decode_w16 :: ByteString -> Word16
@@ -164,7 +175,7 @@ decode_w16' :: [Word8] -> Word16
 decode_w8 = B.head
 decode_w8' = head
 decode_w16 = decode_w16' . B.unpack
-decode_w16' ws = unsafePerformIO $ F.withArray ws (\buf -> F.peek (castptr @Word16 buf))
+decode_w16' ws = unsafePerformIO $ F.withArray ws (F.peek . castptr @Word16)
 
 encode_f32  :: Float -> ByteString
 encode_f32' :: Float -> [Word8]
@@ -172,8 +183,8 @@ encode_f64  :: Double -> ByteString
 encode_f64' :: Double -> [Word8]
 encode_f32 = B.pack . encode_f32'
 encode_f64 = B.pack . encode_f64'
-encode_f32' !f = unsafePerformIO $ F.with f (\buf -> F.peekArray (sizeof @Float) (castptr @Word8 buf))
-encode_f64' !d = unsafePerformIO $ F.with d (\buf -> F.peekArray (sizeof @Double) (castptr @Word8 buf))
+encode_f32' !f = unsafePerformIO $ F.with f (F.peekArray (sizeof @Float)  . castptr @Word8)
+encode_f64' !d = unsafePerformIO $ F.with d (F.peekArray (sizeof @Double) . castptr @Word8)
 
 encode_i16  :: Int16 -> ByteString
 encode_i16' :: Int16 -> [Word8]
@@ -184,9 +195,9 @@ encode_i64' :: Int64 -> [Word8]
 encode_i16  = B.pack . encode_i16'
 encode_i32  = B.pack . encode_i32'
 encode_i64  = B.pack . encode_i64'
-encode_i16' !i = unsafePerformIO $ F.with i (\buf -> F.peekArray (sizeof @Int16) (castptr @Word8 buf))
-encode_i32' !i = unsafePerformIO $ F.with i (\buf -> F.peekArray (sizeof @Int32) (castptr @Word8 buf))
-encode_i64' !i = unsafePerformIO $ F.with i (\buf -> F.peekArray (sizeof @Int64) (castptr @Word8 buf))
+encode_i16' !i = unsafePerformIO $ F.with i (F.peekArray (sizeof @Int16) . castptr @Word8)
+encode_i32' !i = unsafePerformIO $ F.with i (F.peekArray (sizeof @Int32) . castptr @Word8)
+encode_i64' !i = unsafePerformIO $ F.with i (F.peekArray (sizeof @Int64) . castptr @Word8)
 
 decode_f32  :: ByteString -> Float
 decode_f32' :: [Word8] -> Float
@@ -194,8 +205,8 @@ decode_f64  :: ByteString -> Double
 decode_f64' :: [Word8] -> Double
 decode_f32 = decode_f32' . B.unpack
 decode_f64 = decode_f64' . B.unpack
-decode_f32' !ws = unsafePerformIO $ F.withArray ws (\buf -> F.peek (castptr @Float buf))
-decode_f64' !ws = unsafePerformIO $ F.withArray ws (\buf -> F.peek (castptr @Double buf))
+decode_f32' !ws = unsafePerformIO $ F.withArray ws (F.peek . castptr @Float )
+decode_f64' !ws = unsafePerformIO $ F.withArray ws (F.peek . castptr @Double)
 
 decode_i16  :: ByteString -> Int16
 decode_i16' :: [Word8] -> Int16
@@ -206,9 +217,9 @@ decode_i64' :: [Word8] -> Int64
 decode_i16 = decode_i16' . B.unpack
 decode_i32 = decode_i32' . B.unpack
 decode_i64 = decode_i64' . B.unpack
-decode_i16' ws = unsafePerformIO $ F.withArray ws (\buf -> F.peek (castptr @Int16 buf))
-decode_i32' ws = unsafePerformIO $ F.withArray ws (\buf -> F.peek (castptr @Int32 buf))
-decode_i64' ws = unsafePerformIO $ F.withArray ws (\buf -> F.peek (castptr @Int64 buf))
+decode_i16' ws = unsafePerformIO $ F.withArray ws (F.peek . castptr @Int16)
+decode_i32' ws = unsafePerformIO $ F.withArray ws (F.peek . castptr @Int32)
+decode_i64' ws = unsafePerformIO $ F.withArray ws (F.peek . castptr @Int64)
 
 -- * utilities
 -- | reverse the type variables so the first type applied arg is @b@
