@@ -1,14 +1,14 @@
-{-# language RankNTypes #-}
-{-# language TypeApplications #-}
-{-# language AllowAmbiguousTypes #-}
-{-# language BangPatterns #-}
-{-# language ScopedTypeVariables #-}
-{-# language NamedFieldPuns #-}
-{-# language DerivingVia #-}
+{-# language TypeApplications 
+           , AllowAmbiguousTypes 
+           , BangPatterns 
+           , ScopedTypeVariables
+           , NamedFieldPuns 
+           , DerivingVia #-}
 module Code where
 
 import           Prelude hiding (init)
 
+import           Data.Coerce 
 import           Foreign (Ptr, Word8, Word16, Int32, Int64, Int16, Storable)
 import qualified Foreign as F
 import           GHC.IO (unsafePerformIO)
@@ -16,35 +16,29 @@ import           GHC.IO (unsafePerformIO)
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 
+import           Ast (Sym)
+
 
 -- == TODO
---   - unboxed types and shit
---   - unified load parameter abstracted over size for constants?
---   - decide on address size
+--   - global variables
 
 -- = Chunks
-data Chunk = Chunk { code :: ByteString
-                   , constants :: ByteString
-                   }
+data Chunk = MkChunk { name :: Sym -- ^ chunk name ~ function name
+                     , start :: !IAddr
+                     , code :: !ByteString
+                     }
+
+-- | literals
+newtype SMem = MkSMem ByteString
+
+-- | @TODO: global vars
+data Module = MkModule { constants :: !SMem
+                       , funcs :: [Chunk] 
+                       }
 
 -- | initialize a new chunk
-init :: Chunk
-init = Chunk mempty mempty
-
--- | write an instr at end of chunk
-write :: Instr -> Chunk -> Chunk
-write i c@Chunk{code} = c{code=B.snoc code i}
-
-type Addr = Int16
-
--- | adress size of a constant value
-casize :: Int
-casize = sizeof @Addr
-
-
--- | add a constant to the constants array
-addC :: Marshal a => a -> Chunk -> Chunk
-addC v c@Chunk{constants} = c{constants=constants `B.append` encode v}
+init :: String -> IAddr -> Chunk
+init name start = MkChunk { name, start, code= mempty}
 
 -- = OPCODE
 type Instr = Word8
@@ -55,34 +49,56 @@ newtype IAddr = MkIAddr Word16
 newtype LAddr = MkLAddr Word16
   deriving Num via Word16
 
+-- | size of a constant value address
+casize :: Int
+casize = let (MkLAddr x) = undefined in F.sizeOf x
 
-data OpCode = Ipop     -- ^ pop value from stack
+-- | size of a instruction address
+iasize :: Int
+iasize = let (MkIAddr x) = undefined in F.sizeOf x
 
-            | Iret     -- ^ return form function
-            | Irettop  -- ^ return top of the stack
-            | IloadRet -- ^ push return value on stack
-            | Iload    -- ^ push slot (variables) on stack
-            | Istore   -- ^ put top of stack in a slot (Var)
+-- | add a constant to the constants array
+addC :: Marshal a => a -> SMem -> SMem
+addC v sm = coerce B.append sm (encode v)
 
-            | Ilit1   -- ^ 1 byte,  constant bool
-            | Ilit4   -- ^ 4 bytes, constant signed integer
-            | Ilit8   -- ^ 8 bytes, constant double
+-- | notation: @[x,y]@ indicates values on stack: x top of stack, y 2nd on stack
+--             @$x@    stack pointer
+--             @*x@    data pointer
+--             @%x@    code pointer
+data OpCode = Ipop     -- ^ @POP [x]@ pop value from stack
 
-            | Iand    -- ^ infix operator `and`
-            | Ior     -- ^ infix operator `or`
-            | Igt     -- ^ infix operator `>`
-            | Ige     -- ^ infix operator `>=`
-            | Ilt     -- ^ infix operator `<`
-            | Ile     -- ^ infix operator `<=`
-            | Ieq     -- ^ infix operator `==`
-            | Ineq    -- ^ infix operator `!=`
-            | Iadd    -- ^ infix operator `+`
-            | Imin    -- ^ infix operator `-`
-            | Imul    -- ^ infix operator `*`
-            | Idiv    -- ^ infix operator `/`
-            | Imod    -- ^ infix operator `%`
+            | Iret     -- ^ @RET    @ return form function
+            | Irettop  -- ^ @RET [x]@ return top of the stack
+            | IloadRet -- ^ @LDR    @ push return value on stack
+            | Iload    -- ^ @LDS $x @ push slot (variables) on stack
+            | Istore   -- ^ @STR    @ put top of stack in a slot (Var)
 
-            | Iexit    -- ^ exit program
+            | Ilit1   -- ^ @LIT *x@ 1 byte,  constant bool
+            | Ilit4   -- ^ @LIT *x@ 4 bytes, constant signed integer
+            | Ilit8   -- ^ @LIT *x@ 8 bytes, constant double
+
+            | Iand    -- ^ @AND [x,y]@ infix operator `and`
+            | Ior     -- ^ @OR  [x,y]@ infix operator `or`
+            | Igt     -- ^ @GT  [x,y]@ infix operator `>`
+            | Ige     -- ^ @GE  [x,y]@ infix operator `>=`
+            | Ilt     -- ^ @LT  [x,y]@ infix operator `<`
+            | Ile     -- ^ @LE  [x,y]@ infix operator `<=`
+            | Ieq     -- ^ @EQ  [x,y]@ infix operator `==`
+            | Ineq    -- ^ @NEQ [x,y]@ infix operator `!=`
+            | Iadd    -- ^ @ADD [x,y]@ infix operator `+`
+            | Imin    -- ^ @MIN [x,y]@ infix operator `-`
+            | Imul    -- ^ @MUL [x,y]@ infix operator `*`
+            | Idiv    -- ^ @DIV [x,y]@ infix operator `/`
+            | Imod    -- ^ @MOD [x,y]@ infix operator `%`
+
+            -- relative jumps
+            | Ibrf     -- ^ @BRF %p [x]@ branch if true
+            | Ibrt     -- ^ @BRT %p [x]@ branch if false
+            | Ijmp     -- ^ @JMP %p    @ unconditional jump
+            -- absolute jump
+            | ICall    -- ^ @CALL %p @ function
+
+            | Iexit    -- ^ @EXIT@ exit program
             deriving (Enum)
 
 instance Show OpCode where

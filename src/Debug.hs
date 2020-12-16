@@ -15,8 +15,8 @@ import qualified Data.ByteString.Lazy as L
 
 -- | print a chunk in human readable format
 -- @TODO rewrite all of this: no String, a proper output stream, abstract more of it
-disassemble :: String -> Chunk -> L.ByteString
-disassemble name c@Chunk{code} = output $ do
+disassemble :: SMem -> Chunk -> L.ByteString
+disassemble lits c@MkChunk{name,code} = output $ do
   string (printf "=== %s ===\n" name)
   go 0
   where
@@ -28,12 +28,10 @@ disassemble name c@Chunk{code} = output $ do
           let oc = btoc $ code `B.index` i
           instPrefix i oc
           case oc of
-            _ | isLit oc -> string (showLit (caddr i) (valSize oc) c)
+            _ | isLit oc -> string (showLit (caddr i) (valSize oc) lits)
             _ -> pure ()
           endl
           go (i + operandSize oc + 1)
-
-
 
 -- | writes the offset and instruction
 instPrefix :: Int -> OpCode -> Writer Builder ()
@@ -51,8 +49,8 @@ endl = char '\n'
 output :: Writer Builder a -> L.ByteString
 output = B.toLazyByteString . execWriter
 
-showLit :: Word16 -> Int -> Chunk -> String
-showLit addr size = show' . B.take size . B.drop (fromIntegral addr) . constants
+showLit :: Word16 -> Int -> SMem -> String
+showLit addr size (MkSMem bs)= show' . B.take size . B.drop (fromIntegral addr) $ bs
   where
     show' = case size of
               8 -> show . decode @Double

@@ -1,4 +1,3 @@
-{-# language NamedFieldPuns #-}
 module Main where
 
 import System.Environment
@@ -19,7 +18,7 @@ repl _ = runInputT defaultSettings loop
       minput <- getInputLine prompt
       case minput of
         Nothing -> outputStrLn "Leaving."
-        Just input -> (liftIO $ process input) >> loop
+        Just input -> liftIO (process input) >> loop
 
 eval :: GtcEnv -> IO ()
 eval env = print env
@@ -42,7 +41,7 @@ process input = do
 -- | build the GtcEnv
 mkEnv :: (Maybe FilePath, Flags) -> IO GtcEnv
 mkEnv (Nothing, fs) =
-  return GtcEnv{flags=fs, target=Target{name="",path=""}}
+  return GtcEnv{flags=fs, target=Target{fname="",fpath=""}}
 mkEnv (Just fn, fs) =
   do -- pwd <- getEnv "PWD"
      return GtcEnv{flags=fs, target=mkTarget fn}

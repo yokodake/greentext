@@ -1,12 +1,11 @@
-{-# Language KindSignatures
+{-# LANGUAGE FlexibleInstances
+           , KindSignatures
            , MultiParamTypeClasses
-           , FlexibleInstances
            , TypeApplications #-}
 
-{- |
-GreenText Compiler: environment and code gen monad.
--}
-module Gtc 
+-- |
+-- GreenText Compiler: environment and code gen monad.
+module Gtc
     ( -- Greentext compiler
       -- * Environment
       GtcEnv(..)
@@ -18,51 +17,41 @@ module Gtc
       -- * Monad
     , GtcM
     , runGtcM
-    , label 
+    , label
     , Write(..)
       -- ** inner types
     , ByteBuilder
     , IAddr
+    ) where
 
-) where
-
-import Data.Word (Word8, Word16)
-import Data.Coerce (coerce)
-
-import System.FilePath ( takeDirectory, takeFileName )
-import Control.Monad.Reader.Class ( MonadReader(..) )
-import Control.Monad.State.Class ( MonadState(..) )
-import Control.Monad.Except ( MonadError(..) )
-import Control.Monad.Fix ( MonadFix(..) )
-import Control.Applicative (liftA2)
 -- import Control.Monad.Writer.Class
-
-import           Data.ByteString.Builder
+import           Control.Applicative (liftA2)
+import           Control.Monad.Except (MonadError(..))
+import           Control.Monad.Fix (MonadFix(..))
+import           Control.Monad.Reader.Class (MonadReader(..))
+import           Control.Monad.State.Class (MonadState(..))
 import qualified Data.ByteString as S
+import           Data.ByteString.Builder
 import qualified Data.ByteString.Lazy as L
-
-import Code hiding (write)
+import           Data.Coerce (coerce)
+import           Data.Word (Word16, Word8)
+import           System.FilePath (takeDirectory, takeFileName)
+import           Code hiding (write)
 
 -- * Environment
 -- | Greentext compiler envrionment, context and other stuff
-data GtcEnv =
-  GtcEnv { flags :: Flags
-         -- ^ settings & cmdline passed flags
-         , target :: Target
-         -- ^ the file to be interpreted
-         } deriving Show
-
+data GtcEnv = GtcEnv { flags :: Flags -- ^ settings & cmdline passed flags
+                     , target :: Target -- ^ the file to be interpreted
+                     } deriving (Show)
 
 -- | represents what has to be interpreted
-data Target = Target { name :: String
-                     -- ^ filename
-                     , path :: FilePath
-                     -- ^ path to the file
+data Target = Target { fname :: String -- ^ filename
+                     , fpath :: FilePath -- ^ path to the file
                      } deriving (Eq, Show)
 
 -- | build the target from an absolute path
 mkTarget :: FilePath -> Target
-mkTarget p = Target{name=takeFileName p, path=takeDirectory p}
+mkTarget p = Target { fname = takeFileName p, fpath = takeDirectory p }
 
 -- | temporary
 type Flags = [Flag]
@@ -74,68 +63,85 @@ parseFlag :: String -> Flag
 parseFlag ('-':s) = s
 parseFlag s       = s
 
--- Monad
-
 -- | bytecode builder
 type ByteBuilder = Builder
 
 -- | Code generation monad ~ ExceptT RWS
 newtype GtcM s e a =
-  GtcM { runGtcM :: GtcEnv -> s -> IAddr -> Either e (ByteBuilder, s, IAddr, a) }
+  GtcM { runGtcM :: GtcEnv -> s -> IAddr -> Either e (ByteBuilder, s, IAddr, a)
+       }
 
 instance Functor (GtcM s e) where
-  fmap f (GtcM m) = GtcM $ \r s i -> case m r s i of
-                                       Left e -> Left e
-                                       Right (b, s, i, a) -> Right (b, s, i, f a)
+  fmap f (GtcM m) = GtcM
+    $ \r s i -> case m r s i of
+      Left e -> Left e
+      Right (b, s, i, a) -> Right (b, s, i, f a)
+
   {-# INLINE fmap #-}
 
 instance Applicative (GtcM s e) where
   pure a = GtcM $ \r s i -> Right (mempty, s, i, a)
+
   {-# INLINE pure #-}
-  (GtcM mf) <*> (GtcM ma) = GtcM $ \r s0 i0 ->
-    do (w1, s1, i1, f) <- mf r s0 i0
-       (w2, s2, i2, a) <- ma r s1 i1
-       return (w1 <> w2, s2, i2, f a)
+  (GtcM mf) <*> (GtcM ma) = GtcM
+    $ \r s0 i0 -> do
+      (w1, s1, i1, f) <- mf r s0 i0
+      (w2, s2, i2, a) <- ma r s1 i1
+      return (w1 <> w2, s2, i2, f a)
+
   {-# INLINE (<*>) #-}
 
 instance Monad (GtcM s e) where
   return = pure
+
   {-# INLINE return #-}
-  m >>= k = GtcM $ \r s0 i0 ->
-    do (w1, s1, i1, a) <- runGtcM m r s0 i0
-       (w2, s2, i2, b) <- runGtcM (k a) r s1 i1
-       return (w1 <> w2, s2, i2, b)
+  m >>= k = GtcM
+    $ \r s0 i0 -> do
+      (w1, s1, i1, a) <- runGtcM m r s0 i0
+      (w2, s2, i2, b) <- runGtcM (k a) r s1 i1
+      return (w1 <> w2, s2, i2, b)
+
   {-# INLINE (>>=) #-}
 
 instance MonadError e (GtcM s e) where
   throwError e = GtcM $ \_ _ _ -> Left e
+
   {-# INLINE throwError #-}
-  catchError (GtcM m) f = GtcM $ \r s i -> case m r s i of
-                                             Left e -> runGtcM (f e) r s i
-                                             Right a -> Right a
+  catchError (GtcM m) f = GtcM
+    $ \r s i -> case m r s i of
+      Left e  -> runGtcM (f e) r s i
+      Right a -> Right a
+
   {-# INLINE catchError #-}
 
 instance MonadReader GtcEnv (GtcM s e) where
   reader f = GtcM $ \r s i -> pure (mempty, s, i, f r)
+
   {-# INLINE reader #-}
   local f (GtcM m) = GtcM $ \r s i -> m (f r) s i
+
   {-# INLINE local #-}
 
 instance MonadState s (GtcM s e) where
   get = GtcM $ \r s i -> Right (mempty, s, i, s)
+
   {-# INLINE get #-}
   put s = GtcM $ \r _ i -> Right (mempty, s, i, ())
+
   {-# INLINE put #-}
-  state f = GtcM $ \r s0 i -> let (a, s1) = f s0 in
-                              Right (mempty, s1, i, a)
+  state f = GtcM
+    $ \r s0 i -> let (a, s1) = f s0
+                 in Right (mempty, s1, i, a)
+
   {-# INLINE state #-}
 
 instance MonadFix (GtcM s e) where
-  mfix f = GtcM $ \r s i ->
-     let (b, s', i', a) = unEither (runGtcM (f a) r s i)
-     in Right (b, s', i', a)
-     where unEither (Right a) = a
-           unEither (Left e)  = error "mfix: Left"
+  mfix f = GtcM
+    $ \r s i -> let (b, s', i', a) = unEither (runGtcM (f a) r s i)
+                in Right (b, s', i', a)
+    where
+      unEither (Right a) = a
+      unEither (Left e) = error "mfix: Left"
 
 {-- might not want that, since we'll have to update the IAddr, and Builders don't track sizes
  -- so, either we wrap around Builders and add size info, or we don't use Writer
@@ -150,12 +156,14 @@ instance MonadWriter ByteBuilder (GtcM s e) where
   {-# INLINE pass #-}
 -}
 
+-- | gets the current location in the bytebuilder
 label :: GtcM s e IAddr
 label = GtcM $ \r s i -> pure (mempty, s, i, i)
 
 class Write a where
   write :: a -> GtcM s e ()
   size :: a -> Int
+
 instance Write Word8 where
   size _ = 1
   write x = write_ (word8 x) 1
@@ -164,22 +172,26 @@ instance Write OpCode where
   write = write . ctob
 instance Write [Word8] where
   size = length
-  write xs = let bs = S.pack xs in 
-             bs `seq` write_ (byteString bs) (S.length bs)
+  write xs = let bs = S.pack xs
+             in bs `seq` write_ (byteString bs) (S.length bs)
 instance Write [OpCode] where
   size = length
-  write xs = let bs = (S.pack . fmap ctob) xs in 
-             bs `seq` write_ (byteString bs) (S.length bs)
+  write xs = let bs = (S.pack . fmap ctob) xs
+             in bs `seq` write_ (byteString bs) (S.length bs)
+
 instance Write S.ByteString where
   size = S.length
   write bs = write_ (byteString bs) (S.length bs)
 instance Write L.ByteString where
   size = fromIntegral . L.length
   write bs = write_ (lazyByteString bs) (size bs)
-
+instance Write IAddr where
+  size _ = 2
+  write = liftA2 write_ (byteString . coerce encode_w16) size
 instance Write LAddr where
   size _ = 2
   write = liftA2 write_ (byteString . coerce encode_w16) size
 
 write_ :: ByteBuilder -> Int -> GtcM s e ()
-write_ bb len = GtcM $ \r s i -> Right (bb, s, i + MkIAddr (fromIntegral len), ())
+write_ bb len = GtcM
+  $ \r s i -> Right (bb, s, i + MkIAddr (fromIntegral len), ())

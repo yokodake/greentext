@@ -1,24 +1,30 @@
+{-# LANGUAGE RecursiveDo #-}
 module Emit where
 
 import Prelude hiding (init, return)
+import Data.Coerce
 
 import Ast
 import Code hiding (write)
 import Gtc
 
+import Data.ByteString.Builder (toLazyByteString)
+import Data.ByteString.Lazy (toStrict)
+
 emitVarDec :: Decl -> GtcM s e ()
 emitVarDec (Var n e) = error "global var: @TODO"
 
-emitFunDec :: Decl -> GtcM s e ()
-emitFunDec (Fun n ps b) = body >>= mkFunBinding n (length ps)
-  where
-    body = with init $
-             do mapM_ newVar ps
-                emitStmts b
-                ret
+emitFunDec :: Decl -> GtcM Module e ()
+emitFunDec (Fun n ps b) = error "emitFunDec: @TODO"
 
 mkFunBinding :: Sym -> Int -> Chunk -> GtcM s e ()
 mkFunBinding = error "mkFunBinding: @TODO"
+
+genFun :: Sym -> GtcM s e ()
+genFun name = undefined
+  where
+    chunk name start bs = MkChunk {name, start, code = toStrict $ toLazyByteString bs}
+
 
 emitStmts :: [Stmt] -> GtcM s e ()
 emitStmts = mapM_ emitStmt
@@ -29,12 +35,28 @@ emitStmt node = case node of
   Print args -> emitPrint args
   Ass var (Just e) -> newVar var >> emitExpr e >> store var >> pop
   Ass var Nothing  -> newVar var
-  While {} -> undefined
+  While p ss -> emitWhile p ss
   For {} -> undefined
-  Cond {} -> undefined
+  Cond p c a -> emitCond p c a
   Call sym args -> mapM_ emitExpr args >> call sym
   Ret Nothing -> ret
   Ret (Just e) -> emitExpr e >> retTop
+
+emitWhile :: Expr -> [Stmt] -> GtcM s e ()
+emitWhile e ss = mdo start <-label 
+                     emitExpr e   -- while e
+                     brf end      -- {
+                     emitStmts ss
+                     jmp start    -- }
+                     end <- label
+                     pure ()
+
+emitCond :: Expr -> [Stmt] -> Maybe [Stmt] -> GtcM s e ()
+emitCond p c a = mdo emitExpr p
+                     brf alt
+                     emitStmts c
+                     alt <- label
+                     maybe (pure ()) emitStmts a
 
 emitExpr :: Expr -> GtcM s e ()
 emitExpr e = case e of
@@ -55,7 +77,7 @@ emitOp op = write $ case op of
   "and" -> Iand
   "or"  -> Ior
   "=="  -> Ieq
-  "!="  ->  Ineq
+  "!="  -> Ineq
   ">"   -> Igt
   "<"   -> Ilt
   ">="  -> Ige
@@ -114,3 +136,11 @@ print = error "print: @TODO"
 
 call :: Sym -> GtcM s e ()
 call = error "call: @TODO"
+
+brf :: IAddr -> GtcM s e ()
+brf a = do write Ibrf
+           write a
+
+jmp :: IAddr -> GtcM s e ()
+jmp a = do write Ijmp
+           write a
