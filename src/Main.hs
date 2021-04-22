@@ -21,7 +21,7 @@ repl _ = runInputT defaultSettings loop
         Just input -> liftIO (process input) >> loop
 
 eval :: GtcEnv -> IO ()
-eval env = print env
+eval = print
 
 main :: IO ()
 main = do args <- getArgs
@@ -39,16 +39,20 @@ process input = do
   putStrLn ("Syntax: " ++ show ast)
 
 -- | build the GtcEnv
-mkEnv :: (Maybe FilePath, Flags) -> IO GtcEnv
-mkEnv (Nothing, fs) =
-  return GtcEnv{flags=fs, target=Target{fname="",fpath=""}}
-mkEnv (Just fn, fs) =
-  do -- pwd <- getEnv "PWD"
-     return GtcEnv{flags=fs, target=mkTarget fn}
+mkEnv :: Opts -> IO GtcEnv
+mkEnv MkOpts{ filepath_opts, flags_opts=flags }  = return GtcEnv{ target, flags }
+  where target = maybe 
+                   Target{ fname="", fpath="" }
+                   mkTarget
+                   filepath_opts
 
 -- | !TODO handle case where multiple files are given
-parseArgs :: [String] -> (Maybe String, Flags)
-parseArgs = foldl f (Nothing, [])
+parseArgs :: [String] -> Opts
+parseArgs = foldl f MkOpts{ filepath_opts = Nothing, flags_opts = [] }
   where
-    f (fn, fs) ('-':s) = (fn ,parseFlag s : fs)
-    f (_,  fs) s  = (Just s, fs)
+    f o@MkOpts{flags_opts} ('-':s) = o{flags_opts= parseFlag s : flags_opts}
+    f o s  = o{filepath_opts=Just s}
+
+data Opts = MkOpts { filepath_opts :: Maybe FilePath
+                   , flags_opts    :: Flags
+                   } deriving (Show, Eq)
