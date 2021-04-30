@@ -26,11 +26,12 @@ data Expr = Lit LitV
 data LitV = LStr String
           | LBoo Bool
           | LInt Int
+          | LDou Double
           deriving (Eq, Show)
 
 -- | helper in the parser so we can parse @Var@ and @Ass@ with same rule.
 --   this means that this node never occurs in the AST!
-data VAss = VAss { vname :: Sym, vexp :: (Maybe Expr) }
+data VAss = VAss { vname :: Sym, vexp :: Maybe Expr }
           deriving (Eq, Show)
 
 
