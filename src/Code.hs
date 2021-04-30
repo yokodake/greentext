@@ -1,31 +1,33 @@
-{-# language TypeApplications 
-           , AllowAmbiguousTypes 
-           , BangPatterns 
-           , ScopedTypeVariables
-           , NamedFieldPuns 
-           , DerivingVia #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE BinaryLiterals      #-}
+{-# LANGUAGE DerivingVia         #-}
+{-# LANGUAGE NamedFieldPuns      #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 module Code where
 
-import           Prelude hiding (init)
+import           Prelude         hiding (init)
 
-import           Data.Coerce 
-import           Foreign (Ptr, Word8, Word16, Int32, Int64, Int16, Storable)
-import qualified Foreign as F
-import           GHC.IO (unsafePerformIO)
+import           Data.Coerce
+import           Foreign         (Int16, Int32, Int64, Ptr, Storable, Word16,
+                                  Word8)
+import qualified Foreign         as F
+import           GHC.IO          (unsafePerformIO)
 
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 
-import           Ast (Sym)
+import           Ast             (Sym)
 
 
 -- == TODO
 --   - global variables
 
 -- = Chunks
-data Chunk = MkChunk { name :: Sym -- ^ chunk name ~ function name
+data Chunk = MkChunk { name  :: Sym -- ^ chunk name ~ function name
                      , start :: !IAddr
-                     , code :: !ByteString
+                     , code  :: !ByteString
                      }
 
 -- | literals
@@ -33,7 +35,7 @@ newtype SMem = MkSMem ByteString
 
 -- | @TODO: global vars
 data Module = MkModule { constants :: !SMem
-                       , funcs :: [Chunk] 
+                       , funcs     :: [Chunk]
                        }
 
 -- | initialize a new chunk
@@ -68,7 +70,7 @@ addC v sm = coerce B.append sm (encode v)
 data OpCode = Ipop     -- ^ @POP [x]@ pop value from stack
 
             | Iret     -- ^ @RET    @ return form function
-            | Irettop  -- ^ @RET [x]@ return top of the stack
+            | Irettop  -- ^ @RET [x]@ return top of the stack, this pops the value from the stack
             | IloadRet -- ^ @LDR    @ push return value on stack
             | Iload    -- ^ @LDS $x @ push slot (variables) on stack
             | Istore   -- ^ @STR    @ put top of stack in a slot (Var)
@@ -76,6 +78,7 @@ data OpCode = Ipop     -- ^ @POP [x]@ pop value from stack
             | Ilit1   -- ^ @LIT *x@ 1 byte,  constant bool
             | Ilit4   -- ^ @LIT *x@ 4 bytes, constant signed integer
             | Ilit8   -- ^ @LIT *x@ 8 bytes, constant double
+            | IlitS   -- ^ @LIT *x@ N bytes, constant string
 
             | Iand    -- ^ @AND [x,y]@ infix operator `and`
             | Ior     -- ^ @OR  [x,y]@ infix operator `or`
@@ -133,7 +136,7 @@ btoc = toEnum . fromIntegral
 
 -- | get size of the instr's operand in bytes
 operandSize :: OpCode -> Int
-operandSize Iret = 0
+operandSize Iret  = 0
 operandSize Ilit1 = casize
 operandSize Ilit4 = casize
 operandSize Ilit8 = casize
@@ -143,7 +146,7 @@ valSize :: OpCode -> Int
 valSize Ilit1 = 1
 valSize Ilit4 = 4
 valSize Ilit8 = 8
-valSize _ = 0
+valSize _     = 0
 
 -- | is a Literal
 isLit :: OpCode -> Bool
@@ -154,12 +157,13 @@ isLit _     = False
 
 -- == Marshalling
 class Marshal a where
+  encode' :: a -> [Word8]
+  decode' :: [Word8] -> a
+
   encode :: a -> ByteString
   encode = B.pack . encode'
-  encode' :: a -> [Word8]
   decode :: ByteString -> a
   decode = decode' . B.unpack
-  decode' :: [Word8] -> a
   {-# MINIMAL encode', decode' #-}
 
 instance Marshal Double where
@@ -236,6 +240,28 @@ decode_i64 = decode_i64' . B.unpack
 decode_i16' ws = unsafePerformIO $ F.withArray ws (F.peek . castptr @Int16)
 decode_i32' ws = unsafePerformIO $ F.withArray ws (F.peek . castptr @Int32)
 decode_i64' ws = unsafePerformIO $ F.withArray ws (F.peek . castptr @Int64)
+
+-- * runtime rep
+data TypeTag = Bool  | Int  | Double  | String  -- normal values
+             | LBool | LInt | LDouble | LString -- literal values
+
+instance Enum TypeTag where
+  fromEnum Bool    = 0b000
+  fromEnum Int     = 0b001
+  fromEnum Double  = 0b010
+  fromEnum String  = 0b011
+  fromEnum LBool   = 0b100
+  fromEnum LInt    = 0b101
+  fromEnum LDouble = 0b110
+  fromEnum LString = 0b111
+  toEnum 0b000 = Bool    
+  toEnum 0b001 = Int     
+  toEnum 0b010 = Double  
+  toEnum 0b011 = String  
+  toEnum 0b100 = LBool   
+  toEnum 0b101 = LInt    
+  toEnum 0b110 = LDouble 
+  toEnum 0b111 = LString 
 
 -- * utilities
 -- | reverse the type variables so the first type applied arg is @b@
