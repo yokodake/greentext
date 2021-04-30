@@ -44,7 +44,7 @@ data GtcEnv = GtcEnv { flags :: Flags -- ^ settings & cmdline passed flags
                      , target :: Target -- ^ the file to be interpreted
                      } deriving (Show)
 
--- | represents what has to be interpreted
+-- | represents what has to be compiled
 data Target = Target { fname :: String -- ^ filename
                      , fpath :: FilePath -- ^ path to the file
                      } deriving (Eq, Show)
@@ -76,63 +76,57 @@ instance Functor (GtcM s e) where
     $ \r s i -> case m r s i of
       Left e -> Left e
       Right (b, s, i, a) -> Right (b, s, i, f a)
-
   {-# INLINE fmap #-}
 
 instance Applicative (GtcM s e) where
   pure a = GtcM $ \r s i -> Right (mempty, s, i, a)
-
   {-# INLINE pure #-}
+
   (GtcM mf) <*> (GtcM ma) = GtcM
     $ \r s0 i0 -> do
       (w1, s1, i1, f) <- mf r s0 i0
       (w2, s2, i2, a) <- ma r s1 i1
       return (w1 <> w2, s2, i2, f a)
-
   {-# INLINE (<*>) #-}
 
 instance Monad (GtcM s e) where
   return = pure
-
   {-# INLINE return #-}
+
   m >>= k = GtcM
     $ \r s0 i0 -> do
       (w1, s1, i1, a) <- runGtcM m r s0 i0
       (w2, s2, i2, b) <- runGtcM (k a) r s1 i1
       return (w1 <> w2, s2, i2, b)
-
   {-# INLINE (>>=) #-}
 
 instance MonadError e (GtcM s e) where
   throwError e = GtcM $ \_ _ _ -> Left e
-
   {-# INLINE throwError #-}
+
   catchError (GtcM m) f = GtcM
     $ \r s i -> case m r s i of
       Left e  -> runGtcM (f e) r s i
       Right a -> Right a
-
   {-# INLINE catchError #-}
 
 instance MonadReader GtcEnv (GtcM s e) where
   reader f = GtcM $ \r s i -> pure (mempty, s, i, f r)
-
   {-# INLINE reader #-}
-  local f (GtcM m) = GtcM $ \r s i -> m (f r) s i
 
+  local f (GtcM m) = GtcM $ \r s i -> m (f r) s i
   {-# INLINE local #-}
 
 instance MonadState s (GtcM s e) where
   get = GtcM $ \r s i -> Right (mempty, s, i, s)
-
   {-# INLINE get #-}
-  put s = GtcM $ \r _ i -> Right (mempty, s, i, ())
 
+  put s = GtcM $ \r _ i -> Right (mempty, s, i, ())
   {-# INLINE put #-}
+
   state f = GtcM
     $ \r s0 i -> let (a, s1) = f s0
                  in Right (mempty, s1, i, a)
-
   {-# INLINE state #-}
 
 instance MonadFix (GtcM s e) where

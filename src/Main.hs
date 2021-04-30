@@ -7,10 +7,12 @@ import System.Console.Haskeline
 
 import Parser (parseProgram, parseTokens)
 import Gtc
+import Interp (GtiEnv)
+import qualified Interp
 
 -- @Options@ is for later,
 -- including bringing all definitions into scope of the repl
-repl :: GtcEnv -> IO ()
+repl :: GtiEnv -> IO ()
 repl _ = runInputT defaultSettings loop
   where
     prompt = " > "
@@ -27,7 +29,7 @@ main :: IO ()
 main = do args <- getArgs
           case args of
             []        -> error "greentxt: no input file"
-            "repl":xs -> mkEnv (parseArgs xs) >>= repl
+            "repl":xs -> mkIEnv (parseArgs xs) >>= repl
             _         -> mkEnv (parseArgs args) >>= eval
 
 -- | repl input process
@@ -45,6 +47,11 @@ mkEnv MkOpts{ filepath_opts, flags_opts=flags }  = return GtcEnv{ target, flags 
                    Target{ fname="", fpath="" }
                    mkTarget
                    filepath_opts
+
+-- | builds the GtiEnv, for repl
+mkIEnv :: Opts -> IO GtiEnv 
+mkIEnv MkOpts{ filepath_opts=target, flags_opts=flags }  = 
+  return $ Interp.GtiEnv flags (mkTarget <$> target)
 
 -- | !TODO handle case where multiple files are given
 parseArgs :: [String] -> Opts
