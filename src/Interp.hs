@@ -1,7 +1,7 @@
 {-# LANGUAGE UnboxedTuples #-}
 module Interp where
 
-import Data.ByteString
+import Data.ByteString (ByteString)
 
 import Gtc(Target(..), Flags, Flag, mkTarget)
 import Stack ( Stack )

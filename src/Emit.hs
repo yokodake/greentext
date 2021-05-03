@@ -5,7 +5,7 @@ import Prelude hiding (init, return)
 import Data.Coerce
 
 import Ast
-import Code hiding (write)
+import Code hiding (write, LInt) 
 import Gtc
 
 import Data.ByteString.Builder (toLazyByteString)
@@ -13,9 +13,11 @@ import Data.ByteString.Lazy (toStrict)
 
 emitVarDec :: Decl -> GtcM s e ()
 emitVarDec (Var n e) = error "global var: @TODO"
+emitVarDec _ = error "emitVarDec: not a Var"
 
 emitFunDec :: Decl -> GtcM Module e ()
 emitFunDec (Fun n ps b) = error "emitFunDec: @TODO"
+emitFunDec _ = error "emitFunDec: not a Fun"
 
 mkFunBinding :: Sym -> Int -> Chunk -> GtcM s e ()
 mkFunBinding = error "mkFunBinding: @TODO"
@@ -82,6 +84,7 @@ emitOp op = write $ case op of
   "<"   -> Ilt
   ">="  -> Ige
   "<="  -> Ile
+  _     -> error "emitOp: not an operator"
 
 emitPrint :: [Expr] -> GtcM s e ()
 emitPrint = undefined
@@ -89,6 +92,7 @@ emitPrint = undefined
 pushLit :: LitV -> GtcM s e ()
 pushLit lit = case lit of
   LStr _  -> undefined
+  LDou _  -> undefined
   LBoo b -> do addr <- newConst b
                write Ilit1
                write addr
