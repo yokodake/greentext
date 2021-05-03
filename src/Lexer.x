@@ -13,13 +13,14 @@ import Debug.Trace
 
 %wrapper "basic"
 
+$space = [\ \t\f\v]
 $digit = 0-9
 $alpha = [a-zA-Z]
 $eol   = \n
 
 tokens :-
   -- Whitespace insenstive
-  $white+ ;
+  $space+ ;
 
   -- Comments
   "#".* ;
@@ -68,8 +69,6 @@ tokens :-
   -- @TODO floats
   \" .* \"                      { \s -> STR (strip s) }
   $alpha [$alpha $digit \_ \']* { \s -> SYM s }
-
-
 
 {
 data Token = INT Int
