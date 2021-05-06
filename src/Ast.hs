@@ -34,7 +34,13 @@ data LitV = LStr String
 data VAss = VAss { vname :: Sym, vexp :: Maybe Expr }
           deriving (Eq, Show)
 
+-- * REPL
+data ReplAst = RExp Expr
+             | RStm Stmt
+             | RFun Decl
+             deriving (Eq, Show)
 
+-- * Helpers
 -- @TODO Symbols
 type Sym = String
 

@@ -26,7 +26,7 @@ tokens :-
   "#".* ;
 
   -- eol sensitive (?)
-  $eol+ { \_ -> EOL }
+  $eol+   { \_ -> EOL }
   -- Syntax
   \(      { \_ -> LPAR }
   \)      { \_ -> RPAR }
@@ -54,16 +54,16 @@ tokens :-
   "by"    { \_ -> BY }
   "wew"   { \_ -> RVAL}
   "baka"  { \_ -> NOT } -- FIXME
-  ">inb4"     { \_ -> FOR }
-  ">implying" {\_ -> IF }
-  ">or"       {\_ -> ELSE }
-  ">mfw"      { \_ -> PRINT }
-  ">be"       { \_ -> DECL }
-  ">tfw"      { \_ -> RET }
-  ">wewlad"   { \_ -> FN }
-  ">wew"      { \_ -> CALL }
-  ">done"     { \_ -> ENDFOR }
-  ">be me"    { \_ -> MAIN }
+  ">inb4"      { \_ -> FOR }
+  ">implying"  {\_ -> IF }
+  ">or"        {\_ -> ELSE }
+  ">mfw"       { \_ -> PRINT }
+  ">be"        { \_ -> DECL }
+  ">tfw"       { \_ -> RET }
+  ">wewlad"    { \_ -> FN }
+  ">wew"       { \_ -> CALL }
+  ">be me"     { \_ -> MAIN }
+  ">done inb4" { \_ -> ENDFOR }
   ">done implying"    {\_ -> ENDIF }
   ">thank mr skeltal" {\_ -> EXIT}
   $digit+                       { \s -> INT (read s) }
@@ -133,6 +133,7 @@ scanTokens str = go ('\0', [], str)
         AlexSkip inp' len -> go inp'
         AlexToken inp' len act -> do
           let res = act (take len str)
+          
           rest <- go inp'
           return (res:rest)
 }
