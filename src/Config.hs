@@ -3,11 +3,14 @@
 module Config where
 
 import           Data.ByteString.Char8 as BS (ByteString, drop, isPrefixOf,
-                                              pack, unpack)
+                                              pack, unpack, length)
 import           Data.Map              as Map (Map, fromList, (!?))
 import           Data.String           (IsString (..))
 import           System.FilePath       (takeDirectory, takeFileName)
 import           Text.Printf           (printf)
+
+import Debug.Trace
+import Data.Maybe (isJust)
 
 -- | represents what has to be compiled
 data Target = Target { fname :: String -- ^ filename
@@ -39,7 +42,7 @@ all_flags =
 toDFlags :: [ByteString] -> Either String DFlags
 toDFlags ss = go defaultDFlags ss where
   go acc [] = Right acc
-  go acc (f:fs) = maybeToEither (printf "invalid flag `%s`" (unpack f)) (flag_map !? f) >>=
+  go acc (f:fs) = maybeToEither (printf "invalid flag `%s`" (unpack f)) (flag_map !? getFlagName f)>>=
                   \case Switch update -> go (update f acc) fs
                         Option update -> case fs of
                           [] -> Left (printf "invalid usage of flag `%s`: expected an option" (unpack f))
@@ -55,9 +58,10 @@ maybeToEither :: e -> Maybe a -> Either e a
 maybeToEither e = maybe (Left e) Right
 
 
-getFlagName str | not ("--" `isPrefixOf` str) = error "Config::getFlagName: invalid FLAG" -- TODO return Either
-                | "--no-" `isPrefixOf` str = BS.drop 4 str
-                | otherwise                = BS.drop 2 str
+-- TODO handle invalid flag better
+getFlagName str | not ("--" `isPrefixOf` str) = error (printf "Config::getFlagName: invalid FLAG `%s`" (unpack str)) 
+                | "--no-" `isPrefixOf` str = BS.drop (BS.length "--no-") str
+                | otherwise                = BS.drop (BS.length "--") str
 
 data FlagType = Switch (ByteString -> DFlags -> DFlags)            -- ^ bool switch
               | Option  ((ByteString, ByteString) -> DFlags -> DFlags) -- ^ expects an option after the `--flag`
