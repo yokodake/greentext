@@ -3,12 +3,12 @@ module Interp where
 
 import Data.ByteString (ByteString)
 
-import Gtc(Target(..), Flags, Flag, mkTarget)
+import Config(Target(..), DFlags, mkTarget)
 import Stack ( Stack )
 
 -- | should be like @GtcEnv@ except the target is optional.
 --   also contains the current environment (bindings from previous commands)
-data GtiEnv = GtiEnv { flags :: Flags
+data GtiEnv = GtiEnv { flags :: DFlags
                      , target :: Maybe Target 
                      } deriving (Show)
 

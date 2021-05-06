@@ -23,13 +23,14 @@ source-repository head
   type: git
   location: https://github.com/yokodake/greentext
 
-executable greentext
+executable gt
   main-is: Main.hs
   other-modules:
       Lexer
     , Parser
     , Ast
     , Code
+    , Config
     , Debug
     , Emit
     , Gtc
