@@ -5,10 +5,11 @@ import System.Environment
 import Control.Monad.Trans
 import System.Console.Haskeline
 
-import Parser (parseProgram, parseTokens)
+import Parser (parseProgram, parseTokens, PError (..)) 
 import Gtc
 import Interp (GtiEnv)
 import qualified Interp
+import Data.Maybe (fromMaybe)
 
 -- @Options@ is for later,
 -- including bringing all definitions into scope of the repl
@@ -19,8 +20,9 @@ repl _ = runInputT defaultSettings loop
     loop = do
       minput <- getInputLine prompt
       case minput of
-        Nothing -> outputStrLn "Leaving."
-        Just input -> liftIO (process input) >> loop
+        Nothing -> loop
+        Just ":q"-> outputStrLn "Leaving."
+        Just input -> (process input) >> loop
 
 eval :: GtcEnv -> IO ()
 eval = print
@@ -33,12 +35,15 @@ main = do args <- getArgs
             _         -> mkEnv (parseArgs args) >>= eval
 
 -- | repl input process
-process :: String -> IO ()
-process input = do
-  let tokens = parseTokens input
-  putStrLn ("Tokens: " ++ show tokens)
-  let ast = parseProgram input
-  putStrLn ("Syntax: " ++ show ast)
+process :: [Char] -> InputT IO ()
+process input = multiline (input)
+  where
+    multiline input = 
+      do if null input then liftIO $ print "unexpected end of input."
+         else case parseProgram input of
+           Left (PError s) -> liftIO $ print s
+           Left UnexpectedEOI -> getInputLine ".| " >>= multiline . ((input <> "\n") <>) . fromMaybe ""
+           Right ast -> liftIO $ print ast
 
 -- | build the GtcEnv
 mkEnv :: Opts -> IO GtcEnv

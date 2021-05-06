@@ -16,7 +16,7 @@ import Debug.Trace
 $space = [\ \t\f\v]
 $digit = 0-9
 $alpha = [a-zA-Z]
-$eol   = \n
+$eol   = [\n\r]
 
 tokens :-
   -- Whitespace insenstive
@@ -53,6 +53,7 @@ tokens :-
   "to"    { \_ -> TO }
   "by"    { \_ -> BY }
   "wew"   { \_ -> RVAL}
+  "baka"  { \_ -> NOT } -- FIXME
   ">inb4"     { \_ -> FOR }
   ">implying" {\_ -> IF }
   ">or"       {\_ -> ELSE }
@@ -71,22 +72,48 @@ tokens :-
   $alpha [$alpha $digit \_ \']* { \s -> SYM s }
 
 {
-data Token = INT Int
-           | SYM String
-           | STR String
-           | LPAR | RPAR | COM
-           | IF | ELSE | ENDIF
-           | FOR | FROM | TO | BY | ENDFOR
-           | TRUE | FALSE
-           | LT | GT | LTE | GTE
-           | AND | OR
-           | EQ | NEQ
-           | PLUS | MINUS | MULT | DIV | MOD
-           | DECL | ASS
-           | FN | RET | CALL | PRINT | RVAL
-           | MAIN | EXIT
-           | EOL | EOF
-           deriving (Eq, Show)
+data Token 
+    -- literals
+    = INT Int
+    | STR String
+    | TRUE | FALSE
+    -- variables
+    | SYM String
+    -- unary operators
+    | NOT
+    -- binary operators
+    | LT | GT | LTE | GTE
+    | AND | OR
+    | EQ | NEQ
+    | PLUS | MINUS | MULT | DIV | MOD
+    -- conditional statements
+    | IF | ELSE | ENDIF
+    -- loops 
+    | FOR | FROM | TO | BY | ENDFOR
+    -- other keywords
+    | CALL | PRINT | RVAL | EXIT
+    | DECL | ASS
+    | FN | RET 
+    | MAIN 
+    -- syntactic constructs 
+    | LPAR | RPAR | COM
+    | EOL 
+    | EOF
+    deriving (Eq, Show)
+
+{-- ideas:
+  1. wordfilters
+    * baka (~smh) for unary negation
+    * desu 
+    * senpai
+    * kek
+    * keikaku
+    * cringe/based
+    * onions
+  2. memearrows
+    * >imagine
+  3. other
+-}
 
 strip :: String -> String
 strip ('"':xs) = go xs

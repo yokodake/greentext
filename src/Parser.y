@@ -2,6 +2,7 @@
 module Parser ( parseProgram
               , parseTokens
               , Expr (..)
+              , PError (..)
               ) where
 
 import Prelude hiding (Ordering(..))
@@ -19,7 +20,7 @@ import Control.Monad.Except
 %tokentype { Token }
 
 -- parser monad
-%monad { Except String } { (>>=) } { return }
+%monad { Except PError } { (>>=) } { return }
 %error { parseError }
 
 -- token names
@@ -72,10 +73,17 @@ import Control.Monad.Except
 
 %%
 
-Program : Decls          { $1 }
+program : '\n' Decls    { $2 }
+        | Decls         { $1 } 
 
+-- TODO: when we'll includes/modules, empty modules should be allowed
+Decls : Decl            { [$1] }
+      | '\n' Decl Decls { $2:$3 }
+
+{-
 Decls : Decl            { [$1] }
       | Decl '\n' Decls { $1:$3 }
+-}
 
 Decl : VarAss           { Var (vname $1) (vexp $1) }
      | FunDec           { $1 }
@@ -87,27 +95,39 @@ FunDec : 'fn' Var Formals '\n' Stmts   { Fun $2 $3 $5 }
 MainDec : 'main' '\n' Stmts            { Fun (sym "main") [] $3 }
 
 Var : VAR { $1 }
+{-- current sr-conflict: 
+        Stmts -> Stmt . '\n'    shift, and enter state 55
+                                 (reduce using rule 14)
+        Stmts -> Stmt . %eof    reduce using rule 14
 
-Stmts : Stmt             { [$1] }
-      | Stmt '\n' Stmts  { $1:$3 }
+     This is okay because we'll prioritize shifting, and that's what we want.
+-}
+Stmts : Stmt '\n' Stmts { $1:$3 }
+      | Stmt            { [$1] }
 
-Stmt : 'exit'         { Exit }
-     | VarAss         { Ass (vname $1) (vexp $1) }
-     | Cond           { $1 }
-     | For            { $1 }
-     | While          { $1 }
-     | 'print'        { Print [] }
-     | 'print' Args   { Print $2 }
-     | Call           { $1 }
-     | Return         { $1 }
+--       |                 { [] }
+-- TODO: allow empty Stmts. which will create more conflicts though,
+--       mainly due to the ambiguity between assignment in a Stmt and a Decl in the top-level
+--       either we should consider indentation (at least for function bodies) different keywords for 
+--       toplevel declaration and assignment/declaration inside a stmt.
 
-Return : 'return' { Ret Nothing }
-       | 'return' Expr { Ret (Just $2) }
+Stmt : 'exit'           { Exit }
+     | VarAss           { Ass (vname $1) (vexp $1) }
+     | Cond             { $1 }
+     | For              { $1 }
+     | While            { $1 }
+     | 'print'          { Print [] }
+     | 'print' Args     { Print $2 }
+     | Call             { $1 }
+     | Return           { $1 }
 
-Literal : NUM     { LInt $1 }
-        | STR     { LStr $1 }
-        | 'true'  { LBoo True }
-        | 'false' { LBoo False }
+Return : 'return'       { Ret Nothing }
+       | 'return' Expr  { Ret (Just $2) }
+
+Literal : NUM       { LInt $1 }
+        | STR       { LStr $1 }
+        | 'true'    { LBoo True }
+        | 'false'   { LBoo False }
 
 Expr : Literal      { Lit $1 }
      | Infix        { $1 }
@@ -133,7 +153,8 @@ While : 'for' Expr '\n' LBdy  { While $2 $4 }
 For   : 'for' Var 'from' Expr 'to' Expr '\n' LBdy            { For $2 $4 $6 Nothing $8 }
       | 'for' Var 'from' Expr 'to' Expr 'by' Expr '\n' LBdy  { For $2 $4 $6 (Just $8) $10 }
 
-LBdy : Stmts '\n' 'endfor'     { $1 }
+LBdy : Stmts 'endfor'     { $1 }
+     | Stmts '\n' 'endfor'     { $1 }
 
 Cond : 'if' Expr '\n' Stmts '\n' 'endif' { Cond $2 $4 Nothing }
      | 'if' Expr '\n' Stmts '\n' 'else' Stmts '\n' 'endif' { Cond $2 $4 (Just $7)}
@@ -150,15 +171,23 @@ Pars : Var             { [$1] }
 
 
 {
-parseError :: [Token] -> Except String a
-parseError (l:ls) = throwError $ "Parser error: " <> show ls
-parseError [] = throwError "Unexpected end of Input"
+data PError = PError String
+            | UnexpectedEOI
+            deriving Show
 
-parseProgram :: String -> Either String [Decl]
+parseError :: [Token] -> Except PError a
+parseError (l:ls) = (throwError . PError) ("Parser error: " <> show (l:ls))
+parseError [] = throwError UnexpectedEOI
+
+parseProgram :: String -> Either PError [Decl]
 parseProgram input = runExcept $ do
-  tokenStream <- scanTokens input
+  tokenStream <- withExcept PError (scanTokens input)
   program tokenStream
 
-parseTokens :: String -> Either String [Token]
-parseTokens = runExcept . scanTokens
+-- TEMPORARY
+parseProgramStream :: [Token] -> Either PError [Decl]
+parseProgramStream = runExcept . program
+
+parseTokens :: String -> Either PError [Token]
+parseTokens = runExcept . withExcept PError . scanTokens
 }
