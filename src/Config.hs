@@ -6,7 +6,7 @@ import           Data.ByteString.Char8 as BS (ByteString, drop, isPrefixOf,
                                               pack, unpack, length)
 import           Data.Map              as Map (Map, fromList, (!?))
 import           Data.String           (IsString (..))
-import           System.FilePath       (takeDirectory, takeFileName)
+import           System.FilePath       (takeDirectory, takeFileName, (</>))
 import           Text.Printf           (printf)
 
 import Debug.Trace
@@ -21,17 +21,23 @@ data Target = Target { fname :: String -- ^ filename
 mkTarget :: FilePath -> Target
 mkTarget p = Target { fname = takeFileName p, fpath = takeDirectory p }
 
+-- | retrieve the fullpath form Target
+fromTarget :: Target -> FilePath
+fromTarget Target{fpath, fname} = fpath </> fname
+
 -- | Dynamic Flags. Similar to haskell, they can be set by invocation (command-line),
 -- in the repl (or maybe per file with pragmas?)
 data DFlags = DFlags
   { _rprint_static :: Bool
   , _ddump_code    :: Bool
+  , _ddump_flags   :: Bool
   } deriving (Eq, Show)
 
 all_flags :: [(FlagName, FlagType)]
 all_flags =
   [ ("rprint-static", Switch (\s d@DFlags{_rprint_static} -> d{_rprint_static= parseSwitch s}))
   , ("ddump-code"   , Switch (\s d@DFlags{_ddump_code}    -> d{_ddump_code= parseSwitch s}))
+  , ("ddump-flags"  , Switch (\s d@DFlags{_ddump_flags}   -> d{_ddump_flags= parseSwitch s}))
   ]
   where
     parseSwitch str | "--no-" `isPrefixOf` str = False
@@ -41,6 +47,8 @@ all_flags =
 -- | construct the @DFlags@ from a list of commandline args
 toDFlags :: [ByteString] -> Either String DFlags
 toDFlags ss = go defaultDFlags ss where
+  traceFlag :: ByteString -> Maybe a -> Maybe a
+  traceFlag name = flip trace <*> (printf "fl:%s isJust:%s\n" (show name) . show . isJust)
   go acc [] = Right acc
   go acc (f:fs) = maybeToEither (printf "invalid flag `%s`" (unpack f)) (flag_map !? getFlagName f)>>=
                   \case Switch update -> go (update f acc) fs
@@ -52,6 +60,7 @@ toDFlags ss = go defaultDFlags ss where
 defaultDFlags :: DFlags
 defaultDFlags = DFlags { _rprint_static = True -- FIXME only for development
                        , _ddump_code = False
+                       , _ddump_flags = False
                        }
 
 maybeToEither :: e -> Maybe a -> Either e a
