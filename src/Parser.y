@@ -59,7 +59,7 @@ import Control.Monad.Except
   'return'{ RET }
   'rval'  { RVAL }
   'call'  { CALL }
-  'main'  { main }
+  'main'  { MAIN }
   'exit'  { EXIT }
   'print' { PRINT }
   '\n'    { EOL }
