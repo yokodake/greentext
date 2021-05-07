@@ -23,22 +23,23 @@ source-repository head
   type: git
   location: https://github.com/yokodake/greentext
 
-executable gt
-  main-is: Main.hs
-  other-modules:
+library
+  exposed-modules:
       Lexer
     , Parser
     , Ast
     , Code
     , Config
     , Debug
+    , Driver
     , Emit
     , Gtc
     , Interp
+    , Repl
     , Stack
   hs-source-dirs:
       src
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
   build-tools:
       alex
     , happy
@@ -49,20 +50,31 @@ executable gt
     , containers
     , filepath
     , haskeline
+    -- required for MonadMask from haskeline API
+    , exceptions
     , mtl
     , transformers
   default-language: Haskell2010
-  default-extensions: 
+  default-extensions:
       TypeApplications
     , BangPatterns
     , ScopedTypeVariables
     , NamedFieldPuns
     , DerivingVia
-  
+
   if os(windows) {
     build-depends: Win32 < 2.10
   }
-            
+
+executable gt
+  main-is: Main.hs
+  hs-source-dirs:
+    exe
+  default-language: Haskell2010
+  build-depends:
+      base >= 4.7 && <5
+    , greentext
+  ghc-options: -threaded -Wall
 
 test-suite greentext-test
   type: exitcode-stdio-1.0
@@ -73,4 +85,5 @@ test-suite greentext-test
   build-depends:
       base >=4.7 && <5
     , greentext
+    , hspec
   default-language: Haskell2010

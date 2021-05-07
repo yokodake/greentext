@@ -68,7 +68,7 @@ maybeToEither e = maybe (Left e) Right
 
 
 -- TODO handle invalid flag better
-getFlagName str | not ("--" `isPrefixOf` str) = error (printf "Config::getFlagName: invalid FLAG `%s`" (unpack str)) 
+getFlagName str | not ("--" `isPrefixOf` str) = error (printf "Config::getFlagName: invalid FLAG `%s`" (unpack str))
                 | "--no-" `isPrefixOf` str = BS.drop (BS.length "--no-") str
                 | otherwise                = BS.drop (BS.length "--") str
 
@@ -78,5 +78,6 @@ data FlagType = Switch (ByteString -> DFlags -> DFlags)            -- ^ bool swi
 -- !TODO lenses would be ideal here
 -- ("name", FlagType)
 type FlagName = ByteString
+
 flag_map :: Map FlagName FlagType
 flag_map = fromList all_flags

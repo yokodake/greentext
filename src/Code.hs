@@ -20,12 +20,10 @@ import qualified Data.ByteString as B
 
 import           Ast             (Sym)
 
+-- TODO : global vars
 
--- == TODO
---   - global variables
-
--- = Chunks
-data Chunk = MkChunk { name  :: Sym -- ^ chunk name ~ function name
+-- * Chunks
+data Chunk = MkChunk { name  :: Sym    -- ^ chunk name ~ function name
                      , start :: !IAddr
                      , code  :: !ByteString
                      }
@@ -33,16 +31,16 @@ data Chunk = MkChunk { name  :: Sym -- ^ chunk name ~ function name
 -- | literals
 newtype SMem = MkSMem ByteString
 
--- | @TODO: global vars
-data Module = MkModule { constants :: !SMem
-                       , funcs     :: [Chunk]
+-- | \@TODO: global vars
+data Module = MkModule { constants :: !SMem    -- ^ static mem for literals
+                       , funcs     :: [Chunk]  -- ^ list of functions
                        }
 
 -- | initialize a new chunk
 init :: String -> IAddr -> Chunk
 init name start = MkChunk { name, start, code= mempty}
 
--- = OPCODE
+-- * OPCODE
 type Instr = Word8
 -- | instr. addr
 newtype IAddr = MkIAddr Word16
@@ -63,10 +61,11 @@ iasize = let (MkIAddr x) = undefined in F.sizeOf x
 addC :: Marshal a => a -> SMem -> SMem
 addC v sm = coerce B.append sm (encode v)
 
--- | notation: @[x,y]@ indicates values on stack: x top of stack, y 2nd on stack
---             @$x@    stack pointer
---             @*x@    data pointer
---             @%x@    code pointer
+-- | notation: 
+--   * @[x,y]@ indicates values on stack: x top of stack, y 2nd on stack
+--   * @$x@    stack pointer\n
+--   * @*x@    data pointer
+--   * @%x@    code pointer
 data OpCode = Ipop     -- ^ @POP [x]@ pop value from stack
 
             | Iret     -- ^ @RET    @ return form function
@@ -155,7 +154,7 @@ isLit Ilit4 = True
 isLit Ilit8 = True
 isLit _     = False
 
--- == Marshalling
+-- ** Marshalling
 class Marshal a where
   encode' :: a -> [Word8]
   decode' :: [Word8] -> a
@@ -264,7 +263,7 @@ instance Enum TypeTag where
   toEnum 0b111 = LString 
 
 -- * utilities
--- | reverse the type variables so the first type applied arg is @b@
+-- | reverse the type variables so the first type applied arg is @b@,  
 -- @a@ will almost always be inferrred from the function arg anyways.
 castptr :: forall b a. Ptr a -> Ptr b
 castptr = F.castPtr
