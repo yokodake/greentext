@@ -66,8 +66,9 @@ output :: Writer Builder a -> L.ByteString
 output = B.toLazyByteString . execWriter
 
 showLit :: Word16 -> Int -> SMem -> String
-showLit addr size (MkSMem bs)= show' . B.take size . B.drop (fromIntegral addr) $ bs
+showLit addr size (MkSMem bs)= printf "0x%04x   (%s)" addr (v_str)
   where
+    v_str = show' . B.take size . B.drop (fromIntegral addr) $ bs
     show' = case size of
               8 -> show . decode @Double
               4 -> show . decode @Int32
