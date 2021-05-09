@@ -8,7 +8,7 @@ module Repl where
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.State.Strict (MonadState(..), StateT (StateT), execStateT, evalStateT, modify)
 import Control.Monad.Trans (MonadTrans(lift))
-import Data.ByteString.Char8 (ByteString, pack)
+import Data.ByteString.Char8 (ByteString, pack, empty)
 import Data.Char (isSpace)
 import Data.Map.Strict ((!?), Map)
 import qualified Data.Map.Strict as M 
@@ -16,11 +16,19 @@ import Data.Map.Strict ((!?))
 import Data.Functor (($>))
 import System.Console.Haskeline (InputT, getInputLine, runInputT, defaultSettings)
 import Text.Printf (printf)
+import qualified Data.ByteString as BW
+import qualified Data.ByteString.Builder as Bld
+import qualified Data.ByteString.Lazy as BL
 
-import Ast (ReplAst)
+import Ast (ReplAst (..))
 import Config
 import Interp
 import Parser (PError(..), parseReplLine)
+import Code
+import Data.Coerce (coerce)
+import Gtc (GtcM(..), GtcEnv, defaultGtcEnv)
+import Emit (emitExpr)
+import Debug (disassembleWithoutHeader)
 
 class Monad m => MonadInput m where
   liftInput :: InputT IO a -> m a
@@ -64,7 +72,17 @@ repl env = (runInputT defaultSettings . flip evalStateT env) go
         Nothing -> liftIO $ quitRepl
         Just input | isCommand input -> replCommand input
                    | isBlank input -> pure True
-                   | otherwise -> liftInput $ getLines print input >> pure True
+                   | otherwise -> liftInput $ getLines process input >> pure True
+
+process :: ReplAst -> IO ()
+process (RExp exp) = 
+  let env = defaultGtcEnv
+      mod = MkModule (coerce empty) []
+      toChunk addr builder = MkChunk "it" addr (BW.toStrict $ Bld.toLazyByteString $ builder)
+  in case runGtcM (emitExpr exp) env mod 0 of
+  Left s -> putStrLn s
+  Right (builder, mod, _, _) -> BL.putStr $ disassembleWithoutHeader (constants mod) (toChunk 0 builder)
+process _ = putStrLn "Not supported."
 
 isBlank = all isSpace
 
@@ -110,15 +128,15 @@ getLines f firstLine = go firstLine
 extractCommand :: String -> Maybe (String, [String])
 extractCommand (':':rest) = 
   let hd [] = Nothing
-    hd (x:xs) = Just x
-    splitSpace acc []       = acc `seq` acc
-    splitSpace acc (' ':xs) = acc `seq` splitSpace acc xs
-    splitSpace acc (x:xs) = let (y, ys) = untilSpace (x:xs)
-                            in splitSpace (acc <> [y]) ys
-    untilSpace [] = ([], [])
-    untilSpace (x:xs) | isSpace x = ([], xs)
-                      | otherwise = case untilSpace xs of
-                                      (y,ys) -> (x:y, ys)
+      hd (x:xs) = Just x
+      splitSpace acc []       = acc `seq` acc
+      splitSpace acc (' ':xs) = acc `seq` splitSpace acc xs
+      splitSpace acc (x:xs) = let (y, ys) = untilSpace (x:xs)
+                              in splitSpace (acc <> [y]) ys
+      untilSpace [] = ([], [])
+      untilSpace (x:xs) | isSpace x = ([], xs)
+                        | otherwise = case untilSpace xs of
+                                        (y,ys) -> (x:y, ys)
       ws = splitSpace [] rest 
   in (,) <$> hd ws <*> pure (tail ws)
 extractCommand _ = error "no command"

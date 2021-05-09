@@ -66,6 +66,7 @@ iasize = let (MkIAddr x) = undefined in F.sizeOf x
 addC :: Marshal a => a -> SMem -> SMem
 addC v sm = coerce B.append sm (encode v)
 
+-- FIXME: use template haskell? MACROS?
 -- | notation:
 --   * @[x,y]@ indicates values on stack: x top of stack, y 2nd on stack
 --   * @$x@    stack pointer\n
@@ -108,6 +109,7 @@ data OpCode = Ipop     -- ^ @POP [x]@ pop value from stack
             | Iexit    -- ^ @EXIT@ exit program
             deriving (Enum)
 
+-- FIXME: use template haskell? MACROS?
 instance Show OpCode where
   show x = case x of
     Iret    -> "RET"
@@ -141,12 +143,26 @@ btoc = toEnum . fromIntegral
 {-# INLINE btoc #-}
 
 -- | get size of the instr's operand in bytes
+-- FIXME: use template haskell? MACROS?
 operandSize :: OpCode -> Int
-operandSize Iret  = 0
+operandSize Iret = 0
+operandSize Iadd = 0 
+operandSize Imin = 0 
+operandSize Imul = 0 
+operandSize Idiv = 0 
+operandSize Imod = 0 
+operandSize Iand = 0 
+operandSize Ior  = 0 
+operandSize Igt  = 0 
+operandSize Ige  = 0 
+operandSize Ilt  = 0 
+operandSize Ile  = 0 
+operandSize Ieq  = 0 
+operandSize Ineq = 0 
 operandSize Ilit1 = casize
 operandSize Ilit4 = casize
 operandSize Ilit8 = casize
-operandSize _ = error "Code.operandSize"
+operandSize op = error ("Code.operandSize: " <> show op)
 {-# INLINE operandSize #-}
 
 -- | size of the value
