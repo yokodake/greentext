@@ -8,6 +8,7 @@ import Prelude hiding (Ordering(..))
 -- import AST
 import Control.Monad.Except
 import Debug.Trace
+import Data.Int (Int32)
 
 }
 
@@ -74,7 +75,7 @@ tokens :-
 {
 data Token 
     -- literals
-    = INT Int
+    = INT Int32
     | STR String
     | TRUE | FALSE
     -- variables

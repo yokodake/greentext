@@ -1,23 +1,23 @@
 {-# LANGUAGE RecursiveDo #-}
 module Emit where
 
-import Prelude hiding (init, return)
-import Data.Coerce
+import           Data.ByteString         as BS (length)
+import           Data.ByteString.Builder (toLazyByteString)
+import           Data.ByteString.Lazy    (toStrict)
+import           Data.Coerce
+import           Prelude                 hiding (init, return)
 
-import Ast
-import Code hiding (write, LInt) 
-import Gtc
-
-import Data.ByteString.Builder (toLazyByteString)
-import Data.ByteString.Lazy (toStrict)
+import           Ast
+import           Code                    hiding (LInt, write)
+import           Gtc
 
 emitVarDec :: Decl -> GtcM s e ()
 emitVarDec (Var n e) = error "global var: @TODO"
-emitVarDec _ = error "emitVarDec: not a Var"
+emitVarDec _         = error "emitVarDec: not a Var"
 
 emitFunDec :: Decl -> GtcM Module e ()
 emitFunDec (Fun n ps b) = error "emitFunDec: @TODO"
-emitFunDec _ = error "emitFunDec: not a Fun"
+emitFunDec _            = error "emitFunDec: not a Fun"
 
 mkFunBinding :: Sym -> Int -> Chunk -> GtcM s e ()
 mkFunBinding = error "mkFunBinding: @TODO"
@@ -28,24 +28,24 @@ genFun name = undefined
     chunk name start bs = MkChunk {name, start, code = toStrict $ toLazyByteString bs}
 
 
-emitStmts :: [Stmt] -> GtcM s e ()
+emitStmts :: [Stmt] -> GtcM Module e ()
 emitStmts = mapM_ emitStmt
 
-emitStmt :: Stmt -> GtcM s e ()
+emitStmt :: Stmt -> GtcM Module e ()
 emitStmt node = case node of
-  Exit -> exit
-  Print args -> emitPrint args
+  Exit             -> exit
+  Print args       -> emitPrint args
   Ass var (Just e) -> newVar var >> emitExpr e >> store var >> pop
   Ass var Nothing  -> newVar var
-  While p ss -> emitWhile p ss
-  For {} -> undefined
-  Cond p c a -> emitCond p c a
-  Call sym args -> mapM_ emitExpr args >> call sym
-  Ret Nothing -> ret
-  Ret (Just e) -> emitExpr e >> retTop
+  While p ss       -> emitWhile p ss
+  For {}           -> undefined
+  Cond p c a       -> emitCond p c a
+  Call sym args    -> mapM_ emitExpr args >> call sym
+  Ret Nothing      -> ret
+  Ret (Just e)     -> emitExpr e >> retTop
 
-emitWhile :: Expr -> [Stmt] -> GtcM s e ()
-emitWhile e ss = mdo start <-label 
+emitWhile :: Expr -> [Stmt] -> GtcM Module e ()
+emitWhile e ss = mdo start <-label
                      emitExpr e   -- while e
                      brf end      -- {
                      emitStmts ss
@@ -53,14 +53,14 @@ emitWhile e ss = mdo start <-label
                      end <- label
                      pure ()
 
-emitCond :: Expr -> [Stmt] -> Maybe [Stmt] -> GtcM s e ()
+emitCond :: Expr -> [Stmt] -> Maybe [Stmt] -> GtcM Module e ()
 emitCond p c a = mdo emitExpr p
                      brf alt
                      emitStmts c
                      alt <- label
                      maybe (pure ()) emitStmts a
 
-emitExpr :: Expr -> GtcM s e ()
+emitExpr :: Expr -> GtcM Module e ()
 emitExpr e = case e of
   Lit lit -> pushLit lit
   Ref var -> pushVar var
@@ -89,7 +89,7 @@ emitOp op = write $ case op of
 emitPrint :: [Expr] -> GtcM s e ()
 emitPrint = undefined
 
-pushLit :: LitV -> GtcM s e ()
+pushLit :: LitV -> GtcM Module e ()
 pushLit lit = case lit of
   LStr _  -> undefined
   LDou _  -> undefined
@@ -110,26 +110,35 @@ with :: Chunk -> GtcM s e () -> GtcM s e Chunk
 with = undefined
 
 -- | generate a new constant
-newConst :: a -> GtcM s e LAddr
-newConst = error "newConst: @TODO"
+newConst :: Marshal a => a -> GtcM Module e LAddr
+newConst lit = do let bs = encode lit
+                  sz <- BS.length . coerce . constants <$> get
+                  modify' (\m@MkModule{constants} -> m{constants=constants <> coerce (encode lit)})
+                  pure (fromIntegral sz)
+
 newVar = error "newVar: @TODO"
 pushVar = error "pushVar: @TODO"
 
 -- * Instructions
 exit :: GtcM s e ()
 exit = write Iexit
+{-# INLINE exit #-}
 
 pushRet :: GtcM s e ()
 pushRet = write IloadRet
+{-# INLINE pushRet #-}
 
 retTop :: GtcM s e ()
 retTop = write Irettop
+{-# INLINE retTop #-}
 
 ret :: GtcM s e ()
 ret = write Iret
+{-# INLINE ret #-}
 
 pop :: GtcM s e ()
 pop = write Ipop
+{-# INLINE pop #-}
 
 store :: Sym -> GtcM s e ()
 store _ = do error "store: @TODO"

@@ -1,10 +1,12 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE BangPatterns        #-}
-{-# LANGUAGE BinaryLiterals      #-}
-{-# LANGUAGE DerivingVia         #-}
-{-# LANGUAGE NamedFieldPuns      #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE AllowAmbiguousTypes        #-}
+{-# LANGUAGE BangPatterns               #-}
+{-# LANGUAGE BinaryLiterals             #-}
+{-# LANGUAGE DerivingStrategies         #-}
+{-# LANGUAGE DerivingVia                #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
+{-# LANGUAGE NamedFieldPuns             #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TypeApplications           #-}
 module Code where
 
 import           Prelude         hiding (init)
@@ -30,6 +32,9 @@ data Chunk = MkChunk { name  :: Sym    -- ^ chunk name ~ function name
 
 -- | literals
 newtype SMem = MkSMem ByteString
+  deriving (Show, Eq)
+  deriving newtype (Semigroup, Monoid)
+
 
 -- | \@TODO: global vars
 data Module = MkModule { constants :: !SMem    -- ^ static mem for literals
@@ -61,7 +66,7 @@ iasize = let (MkIAddr x) = undefined in F.sizeOf x
 addC :: Marshal a => a -> SMem -> SMem
 addC v sm = coerce B.append sm (encode v)
 
--- | notation: 
+-- | notation:
 --   * @[x,y]@ indicates values on stack: x top of stack, y 2nd on stack
 --   * @$x@    stack pointer\n
 --   * @*x@    data pointer
@@ -128,10 +133,12 @@ instance Show OpCode where
 -- | code to byte
 ctob :: OpCode -> Instr
 ctob = fromIntegral . fromEnum
+{-# INLINE ctob #-}
 
 -- | byte to code
 btoc :: Instr -> OpCode
 btoc = toEnum . fromIntegral
+{-# INLINE btoc #-}
 
 -- | get size of the instr's operand in bytes
 operandSize :: OpCode -> Int
@@ -139,6 +146,8 @@ operandSize Iret  = 0
 operandSize Ilit1 = casize
 operandSize Ilit4 = casize
 operandSize Ilit8 = casize
+operandSize _ = error "Code.operandSize"
+{-# INLINE operandSize #-}
 
 -- | size of the value
 valSize :: OpCode -> Int
@@ -146,6 +155,7 @@ valSize Ilit1 = 1
 valSize Ilit4 = 4
 valSize Ilit8 = 8
 valSize _     = 0
+{-# INLINE valSize #-}
 
 -- | is a Literal
 isLit :: OpCode -> Bool
@@ -153,6 +163,7 @@ isLit Ilit1 = True
 isLit Ilit4 = True
 isLit Ilit8 = True
 isLit _     = False
+{-# INLINE isLit #-}
 
 -- ** Marshalling
 class Marshal a where
@@ -177,6 +188,12 @@ instance Marshal Word8 where
 instance Marshal Word16 where
   encode' = encode_w16'
   decode' = decode_w16'
+instance Marshal Bool where
+  encode' True = encode_w8' 0
+  encode' False = encode_w8' 1
+  decode' [0] = False
+  decode' [_] = True
+  decode' _ = error ("Code.Marshal.decode' not one byte.")
 
 
 encode_w8 :: Word8 -> ByteString
@@ -253,17 +270,17 @@ instance Enum TypeTag where
   fromEnum LInt    = 0b101
   fromEnum LDouble = 0b110
   fromEnum LString = 0b111
-  toEnum 0b000 = Bool    
-  toEnum 0b001 = Int     
-  toEnum 0b010 = Double  
-  toEnum 0b011 = String  
-  toEnum 0b100 = LBool   
-  toEnum 0b101 = LInt    
-  toEnum 0b110 = LDouble 
-  toEnum 0b111 = LString 
+  toEnum 0b000 = Bool
+  toEnum 0b001 = Int
+  toEnum 0b010 = Double
+  toEnum 0b011 = String
+  toEnum 0b100 = LBool
+  toEnum 0b101 = LInt
+  toEnum 0b110 = LDouble
+  toEnum 0b111 = LString
 
 -- * utilities
--- | reverse the type variables so the first type applied arg is @b@,  
+-- | reverse the type variables so the first type applied arg is @b@,
 -- @a@ will almost always be inferrred from the function arg anyways.
 castptr :: forall b a. Ptr a -> Ptr b
 castptr = F.castPtr

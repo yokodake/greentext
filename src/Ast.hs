@@ -1,5 +1,7 @@
 module Ast where
 
+import Data.Int (Int32)
+
 type Program = [Decl]
 
 data Decl = Var Sym (Maybe Expr)
@@ -25,7 +27,7 @@ data Expr = Lit LitV
 -- | @NOTE Can we use GADTs here?
 data LitV = LStr String
           | LBoo Bool
-          | LInt Int
+          | LInt Int32
           | LDou Double
           deriving (Eq, Show)
 
