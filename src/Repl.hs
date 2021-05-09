@@ -10,7 +10,10 @@ import Control.Monad.State.Strict (MonadState(..), StateT (StateT), execStateT, 
 import Control.Monad.Trans (MonadTrans(lift))
 import Data.ByteString.Char8 (ByteString, pack)
 import Data.Char (isSpace)
-import Data.Map ((!?))
+import Data.Map.Strict ((!?), Map)
+import qualified Data.Map.Strict as M 
+import Data.Map.Strict ((!?))
+import Data.Functor (($>))
 import System.Console.Haskeline (InputT, getInputLine, runInputT, defaultSettings)
 import Text.Printf (printf)
 
@@ -42,7 +45,10 @@ type ReplM = StateT GtiEnv (InputT IO)
 repl :: GtiEnv -> IO ()
 repl env = (runInputT defaultSettings . flip evalStateT env) go
   where
-    isCommand (':':_) = True
+    stripSpace [] = []
+    stripSpace (x:xs) | isSpace x = stripSpace xs
+                      | otherwise = x:xs
+    isCommand (stripSpace -> (':':_)) = True
     isCommand _       = False
     prompt = " # "
 
@@ -60,14 +66,20 @@ repl env = (runInputT defaultSettings . flip evalStateT env) go
                    | isBlank input -> pure True
                    | otherwise -> liftInput $ getLines print input >> pure True
 
-isBlank = all (== ' ')
+isBlank = all isSpace
 
 quitRepl :: IO Bool
 quitRepl = (putStrLn "Leaving.") >> return False
 
-replCommand :: (MonadIO m, MonadState GtiEnv m) => String -> m Bool
-replCommand ":q" = liftIO $ quitRepl
-replCommand _    = liftIO (putStrLn "Uknown command") >> return True
+replCommand :: String -> ReplM Bool
+replCommand line = 
+  case extractCommand line of
+    Nothing -> msg line
+    Just (cmd, args) -> case commands_map !? cmd of
+      Nothing -> msg cmd
+      Just f -> f args
+  where msg s = liftIO (putStrLn (printf "unrecognized command: `%s`" s)) $> True
+
 
 -- TODO refactor this crap
 -- | get (maybe) multiple lines of input
@@ -96,10 +108,8 @@ getLines f firstLine = go firstLine
                   | otherwise -> multiline (prev <> "\n" <> s)
 
 extractCommand :: String -> Maybe (String, [String])
-extractCommand (':':rest) = let ws = splitSpace [] rest in
-                            (,) <$> hd ws <*> pure (tail ws)
-  where
-    hd [] = Nothing
+extractCommand (':':rest) = 
+  let hd [] = Nothing
     hd (x:xs) = Just x
     splitSpace acc []       = acc `seq` acc
     splitSpace acc (' ':xs) = acc `seq` splitSpace acc xs
@@ -109,12 +119,15 @@ extractCommand (':':rest) = let ws = splitSpace [] rest in
     untilSpace (x:xs) | isSpace x = ([], xs)
                       | otherwise = case untilSpace xs of
                                       (y,ys) -> (x:y, ys)
+      ws = splitSpace [] rest 
+  in (,) <$> hd ws <*> pure (tail ws)
+extractCommand _ = error "no command"
 
 commands :: [(String, [String] -> ReplM (), Bool)]
 commands =
   [ ("q"   , const quitRepl                , False)
   , ("load", const (notImplemented ":load"), True)
-  , ("set" , mapM_ setFlag         , True)
+  , ("set" , mapM_ setFlag                 , True)
   ]
   where
     quitRepl = liftIO (putStrLn "Leaving.")
@@ -124,4 +137,8 @@ commands =
     setFlag fl@(pack -> flb) = case flag_map !? (getFlagName flb) of
       Nothing -> liftIO $ putStrLn (printf "unrecognised flag `%s`" fl)
       Just (Option _) -> liftIO $ putStrLn "commands.setFlag.Option: Not Implemented Yet"
-      Just (Switch update) -> error "@TODO"
+      Just (Switch update) -> modify (\e@GtiEnv{flags} -> e{flags=update flb flags}) -- FIXME uses lenses
+
+commands_map :: M.Map String ([String] -> ReplM Bool)
+commands_map = M.fromList . map mkcmd $ commands
+  where mkcmd (name, m, continue) = (name, \args -> m args >> pure continue)
