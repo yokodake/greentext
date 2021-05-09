@@ -13,12 +13,27 @@ import           Data.ByteString.Builder (Builder)
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Lazy as L
 
+-- | print a module in humand readable format
+disassembleModule :: String -> Module -> L.ByteString
+disassembleModule mname MkModule{constants, funcs} = 
+  output $ mapM_ (\chunk -> do { disass constants chunk; endl }) funcs
+
 -- | print a chunk in human readable format
 -- @TODO rewrite all of this: no String, a proper output stream, abstract more of it
 disassemble :: SMem -> Chunk -> L.ByteString
-disassemble lits c@MkChunk{name,code} = output $ do
-  string (printf "=== %s ===\n" name)
-  go 0
+disassemble lits chunk = output (disass' lits chunk)
+
+-- | print a chunk in human readable format, without the header
+disassembleWithoutHeader :: SMem -> Chunk -> L.ByteString
+disassembleWithoutHeader lits = output . disass lits
+
+disass' :: SMem -> Chunk -> Writer Builder ()
+disass' lits chunk = do
+  string (printf "=== %s ===" (name chunk))
+  disass lits chunk
+
+disass :: SMem -> Chunk -> Writer Builder ()
+disass lits MkChunk{code} = go 0
   where
     caddr i = decode_w16' [code `B.index` (i + 1), code `B.index` (i + 2)]
 
@@ -32,6 +47,7 @@ disassemble lits c@MkChunk{name,code} = output $ do
             _ -> pure ()
           endl
           go (i + operandSize oc + 1)
+  
 
 -- | writes the offset and instruction
 instPrefix :: Int -> OpCode -> Writer Builder ()
