@@ -9,11 +9,20 @@ module Gtc
     ( -- Greentext compiler
       -- * Environment
       GtcEnv(..)
+    , defaultGtcEnv
       -- * Monad
     , GtcM
     , runGtcM
     , label
     , Write(..)
+      -- ** re-exports
+    , MonadError(..)
+    , MonadFix(..)
+    , MonadReader(..)
+    , asks
+    , MonadState(..)
+    , modify'
+    , modify
       -- ** inner types
     , ByteBuilder
     , IAddr
@@ -23,21 +32,23 @@ module Gtc
 import           Control.Applicative (liftA2)
 import           Control.Monad.Except (MonadError(..))
 import           Control.Monad.Fix (MonadFix(..))
-import           Control.Monad.Reader.Class (MonadReader(..))
-import           Control.Monad.State.Class (MonadState(..))
+import           Control.Monad.Reader.Class (MonadReader(..), asks)
+import           Control.Monad.State.Class (MonadState(..), modify', modify)
 import qualified Data.ByteString as S
 import           Data.ByteString.Builder
 import qualified Data.ByteString.Lazy as L
 import           Data.Coerce (coerce)
 import           Data.Word (Word16, Word8)
 import           Code hiding (write)
-import           Config (Target, DFlags)
+import           Config (Target, DFlags, defaultDFlags, mkTarget)
 
 -- * Environment
 -- | Greentext compiler envrionment, context and other stuff
 data GtcEnv = GtcEnv { flags :: DFlags -- ^ settings & cmdline passed flags
                      , target :: Target -- ^ the file to be interpreted
                      } deriving (Show)
+defaultGtcEnv :: GtcEnv
+defaultGtcEnv = GtcEnv { flags = defaultDFlags , target = mkTarget "<repl>"}
 
 -- | bytecode builder
 type ByteBuilder = Builder
