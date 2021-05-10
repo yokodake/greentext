@@ -7,18 +7,19 @@
 {-# LANGUAGE NamedFieldPuns             #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeApplications           #-}
+{-# LANGUAGE CPP                        #-}
 module Code where
 
 import           Prelude         hiding (init)
 
+import           Data.ByteString (ByteString)
+import qualified Data.ByteString as B
 import           Data.Coerce
 import           Foreign         (Int16, Int32, Int64, Ptr, Storable, Word16,
                                   Word8)
 import qualified Foreign         as F
 import           GHC.IO          (unsafePerformIO)
-
-import           Data.ByteString (ByteString)
-import qualified Data.ByteString as B
+import           Text.Printf     (printf)
 
 import           Ast             (Sym)
 
@@ -50,13 +51,18 @@ type Instr = Word8
 -- | instr. addr
 newtype IAddr = MkIAddr Word16
   deriving Num via Word16
--- | Lit. addr in static mem.
-newtype LAddr = MkLAddr Word16
+instance Show IAddr where
+  show (MkIAddr x) = printf "%%0x%04x" x
+-- | addr in static mem.
+newtype SAddr = MkSAddr Word16
   deriving Num via Word16
+instance Show SAddr where
+  show (MkSAddr x) = printf "*0x%04x" x
 
--- | size of a constant value address
-casize :: Int
-casize = let (MkLAddr x) = undefined in F.sizeOf x
+
+-- | size of a static memory address
+sasize :: Int
+sasize = let (MkSAddr x) = undefined in F.sizeOf x
 
 -- | size of a instruction address
 iasize :: Int
@@ -66,71 +72,61 @@ iasize = let (MkIAddr x) = undefined in F.sizeOf x
 addC :: Marshal a => a -> SMem -> SMem
 addC v sm = coerce B.append sm (encode v)
 
--- FIXME: use template haskell? MACROS?
--- | notation:
---   * @[x,y]@ indicates values on stack: x top of stack, y 2nd on stack
---   * @$x@    stack pointer\n
---   * @*x@    data pointer
---   * @%x@    code pointer
-data OpCode = Ipop     -- ^ @POP [x]@ pop value from stack
+#define OPCODE_TABLE(F) \
+  F(=, Ipop    , {- ^ @POP [x]@ pop value from stack -}               , "POP"    , 0) \
+  F(|, Iret    , {- ^ @RET    @ return form function -}               , "RET"    , 0) \
+  F(|, Irettop , {- ^ @RET [x]@ return (and pops) top of the stack -} , "RETTOP" , 0) \
+  F(|, IloadRet,{- ^ @LDR    @ push return value on stack -}          , "LOADRET", 0) \
+  F(|, Iload  , {- ^ @LDS $x @ push slot (variables) on stack -}      , "LOAD"   , 0) \
+  F(|, Istore , {- ^ @STR    @ put top of stack in a slot (Var) -}    , "STORE"  , 0) \
+\
+  F(|, Ilit1  , {- ^ @LIT *x@ 1 byte:  constant bool -}           , "LIT1" , sasize) \
+  F(|, Ilit4  , {- ^ @LIT *x@ 4 bytes: constant signed integer -} , "LIT4" , sasize) \
+  F(|, Ilit8  , {- ^ @LIT *x@ 8 bytes: constant double -}         , "LIT8" , sasize) \
+  F(|, IlitS  , {- ^ @LIT *x@ N bytes: constant string -}         , "LITS" , sasize) \
+\
+  F(|, Iand   , {- ^ @AND [x;y]@ infix operator @and@ -} , "OP_and", 0) \
+  F(|, Ior    , {- ^ @OR  [x;y]@ infix operator @or@ -}  , "OP_or" , 0) \
+  F(|, Igt    , {- ^ @GT  [x;y]@ infix operator @>@ -}   , "OP_>"  , 0) \
+  F(|, Ige    , {- ^ @GE  [x;y]@ infix operator @>=@ -}  , "OP_>=" , 0) \
+  F(|, Ilt    , {- ^ @LT  [x;y]@ infix operator @<@ -}   , "OP_<"  , 0) \
+  F(|, Ile    , {- ^ @LE  [x;y]@ infix operator @<=@ -}  , "OP_<=" , 0) \
+  F(|, Ieq    , {- ^ @EQ  [x;y]@ infix operator @==@ -}  , "OP_==" , 0) \
+  F(|, Ineq   , {- ^ @NEQ [x;y]@ infix operator @!=@ -}  , "OP_!=" , 0) \
+  F(|, Iadd   , {- ^ @ADD [x;y]@ infix operator @+@ -}   , "OP_+"  , 0) \
+  F(|, Imin   , {- ^ @MIN [x;y]@ infix operator @-@ -}   , "OP_-"  , 0) \
+  F(|, Imul   , {- ^ @MUL [x;y]@ infix operator @*@ -}   , "OP_*"  , 0) \
+  F(|, Idiv   , {- ^ @DIV [x;y]@ infix operator @/@ -}   , "OP_/"  , 0) \
+  F(|, Imod   , {- ^ @MOD [x;y]@ infix operator @%@ -}   , "OP_%"  , 0) \
+\
+  F(|, Ibrf   , {- ^ @BRF %p [x]@ branch if true -}      , "BRF", iasize) \
+  F(|, Ibrt   , {- ^ @BRT %p [x]@ branch if false -}     , "BRT", iasize) \
+  F(|, Ijmp   , {- ^ @JMP %p    @ unconditional jump -}  , "JMP", iasize) \
+\
+  F(|, Icall  , {- ^ @CALL %p@ function call -}          , "CALL", iasize) \
+  F(|, Iexit  , {- ^ @EXIT@    exit program  -}          , "EXIT", 0)
 
-            | Iret     -- ^ @RET    @ return form function
-            | Irettop  -- ^ @RET [x]@ return top of the stack, this pops the value from the stack
-            | IloadRet -- ^ @LDR    @ push return value on stack
-            | Iload    -- ^ @LDS $x @ push slot (variables) on stack
-            | Istore   -- ^ @STR    @ put top of stack in a slot (Var)
+#define OPCODE_TYPE(d, dtor, comment, _1, _2) d dtor comment
+#define OPCODE_SHOW(_, dtor, _1, str, _2) show dtor = str;
+#define OPCODE_SIZE(_, dtor, _1, _2, size) operandSize dtor = size;
 
-            | Ilit1   -- ^ @LIT *x@ 1 byte,  constant bool
-            | Ilit4   -- ^ @LIT *x@ 4 bytes, constant signed integer
-            | Ilit8   -- ^ @LIT *x@ 8 bytes, constant double
-            | IlitS   -- ^ @LIT *x@ N bytes, constant string
+{- | notation:
 
-            | Iand    -- ^ @AND [x,y]@ infix operator `and`
-            | Ior     -- ^ @OR  [x,y]@ infix operator `or`
-            | Igt     -- ^ @GT  [x,y]@ infix operator `>`
-            | Ige     -- ^ @GE  [x,y]@ infix operator `>=`
-            | Ilt     -- ^ @LT  [x,y]@ infix operator `<`
-            | Ile     -- ^ @LE  [x,y]@ infix operator `<=`
-            | Ieq     -- ^ @EQ  [x,y]@ infix operator `==`
-            | Ineq    -- ^ @NEQ [x,y]@ infix operator `!=`
-            | Iadd    -- ^ @ADD [x,y]@ infix operator `+`
-            | Imin    -- ^ @MIN [x,y]@ infix operator `-`
-            | Imul    -- ^ @MUL [x,y]@ infix operator `*`
-            | Idiv    -- ^ @DIV [x,y]@ infix operator `/`
-            | Imod    -- ^ @MOD [x,y]@ infix operator `%`
+   * @[x,y]@ indicates values on stack: x top of stack, y 2nd on stack
 
-            -- relative jumps
-            | Ibrf     -- ^ @BRF %p [x]@ branch if true
-            | Ibrt     -- ^ @BRT %p [x]@ branch if false
-            | Ijmp     -- ^ @JMP %p    @ unconditional jump
-            -- absolute jump
-            | ICall    -- ^ @CALL %p @ function
+   * @$x@    stack pointer\n
 
-            | Iexit    -- ^ @EXIT@ exit program
-            deriving (Enum)
+   * @*x@    data pointer
 
--- FIXME: use template haskell? MACROS?
-instance Show OpCode where
-  show x = case x of
-    Iret    -> "RET"
-    Irettop -> "RET#"
-    Ilit1   -> "LIT1"
-    Ilit4   -> "LIT4"
-    Ilit8   -> "LIT8"
-    Iand    -> "OP_and"
-    Ior     -> "OP_or"
-    Igt     -> "OP_>"
-    Ige     -> "OP_>="
-    Ilt     -> "OP_<"
-    Ile     -> "OP_<="
-    Ieq     -> "OP_=="
-    Ineq    -> "OP_!="
-    Iadd    -> "OP_+"
-    Imin    -> "OP_-"
-    Imul    -> "OP_*"
-    Idiv    -> "OP_/"
-    Imod    -> "OP_%"
+   * @%x@    code pointer
+-}
+data OpCode OPCODE_TABLE(OPCODE_TYPE) deriving (Enum)
 
+instance Show OpCode where { OPCODE_TABLE(OPCODE_SHOW) } 
+
+-- | get size of the instr's operand in bytes
+operandSize :: OpCode -> Int
+OPCODE_TABLE(OPCODE_SIZE)
 
 -- | code to byte
 ctob :: OpCode -> Instr
@@ -142,28 +138,6 @@ btoc :: Instr -> OpCode
 btoc = toEnum . fromIntegral
 {-# INLINE btoc #-}
 
--- | get size of the instr's operand in bytes
--- FIXME: use template haskell? MACROS?
-operandSize :: OpCode -> Int
-operandSize Iret = 0
-operandSize Iadd = 0 
-operandSize Imin = 0 
-operandSize Imul = 0 
-operandSize Idiv = 0 
-operandSize Imod = 0 
-operandSize Iand = 0 
-operandSize Ior  = 0 
-operandSize Igt  = 0 
-operandSize Ige  = 0 
-operandSize Ilt  = 0 
-operandSize Ile  = 0 
-operandSize Ieq  = 0 
-operandSize Ineq = 0 
-operandSize Ilit1 = casize
-operandSize Ilit4 = casize
-operandSize Ilit8 = casize
-operandSize op = error ("Code.operandSize: " <> show op)
-{-# INLINE operandSize #-}
 
 -- | size of the value
 valSize :: OpCode -> Int
@@ -205,12 +179,11 @@ instance Marshal Word16 where
   encode' = encode_w16'
   decode' = decode_w16'
 instance Marshal Bool where
-  encode' True = encode_w8' 0
+  encode' True  = encode_w8' 0
   encode' False = encode_w8' 1
   decode' [0] = False
   decode' [_] = True
-  decode' _ = error ("Code.Marshal.decode' not one byte.")
-
+  decode' _   = error ("Code.Marshal.decode' not one byte.")
 
 encode_w8 :: Word8 -> ByteString
 encode_w8' :: Word8 -> [Word8]

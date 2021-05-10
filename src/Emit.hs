@@ -110,7 +110,7 @@ with :: Chunk -> GtcM s e () -> GtcM s e Chunk
 with = undefined
 
 -- | generate a new constant
-newConst :: Marshal a => a -> GtcM Module e LAddr
+newConst :: Marshal a => a -> GtcM Module e SAddr
 newConst lit = do let bs = encode lit
                   sz <- BS.length . coerce . constants <$> get
                   modify' (\m@MkModule{constants} -> m{constants=constants <> coerce (encode lit)}) -- FIXME use lenses?

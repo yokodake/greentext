@@ -169,7 +169,7 @@ instance Write L.ByteString where
 instance Write IAddr where
   size _ = 2
   write = liftA2 write_ (byteString . coerce encode_w16) size
-instance Write LAddr where
+instance Write SAddr where
   size _ = 2
   write = liftA2 write_ (byteString . coerce encode_w16) size
 
