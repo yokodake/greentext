@@ -25,18 +25,19 @@ source-repository head
 
 library
   exposed-modules:
-      Lexer
-    , Parser
+      Driver
     , Ast
     , Code
     , Config
     , Debug
-    , Driver
     , Emit
     , Gtc
     , Interp
+    , Lexer
+    , Parser
     , Repl
     , Stack
+    , Utils
   hs-source-dirs:
       src
   ghc-options:
@@ -44,15 +45,18 @@ library
       alex
     , happy
   build-depends:
-      array
-    , base >= 4.7 && <5
+      base >= 4.7 && <5
+    , array
     , bytestring >= 0.11 && < 0.12
     , containers
-    , filepath
-    , haskeline
     -- required for MonadMask from haskeline API
     , exceptions
+    , filepath
+    , haskeline
+    , microlens
+    , microlens-th
     , mtl
+    , template-haskell
     , transformers
   default-language: Haskell2010
   default-extensions:

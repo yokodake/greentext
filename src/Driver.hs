@@ -30,16 +30,16 @@ import Repl (repl)
 main :: IO ()
 main = do args <- getArgs_
           case args of
-            []        -> error "greentxt: no input file"
             x:xs | x == pack "repl" -> mkIEnv (parseArgs xs) >>= exitLeft repl
-            _         -> mkEnv (parseArgs args) >>= exitLeft eval
+            []   -> error "greentxt: no input file"
+            _    -> mkEnv (parseArgs args) >>= exitLeft eval
   where
     exitLeft _ (Left e)  = die (printf "error: %s\n" e)
     exitLeft f (Right x) = f x
 
 eval :: GtcEnv -> IO ()
 eval env@GtcEnv{flags, target} =
-  do when (_ddump_flags flags) (print env)
+  do when (ddump_flags flags) (print env)
      putStrLn ""
      src <- (readFile . fromTarget) target
      (print . parseProgram) src

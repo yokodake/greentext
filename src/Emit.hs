@@ -113,7 +113,7 @@ with = undefined
 newConst :: Marshal a => a -> GtcM Module e LAddr
 newConst lit = do let bs = encode lit
                   sz <- BS.length . coerce . constants <$> get
-                  modify' (\m@MkModule{constants} -> m{constants=constants <> coerce (encode lit)})
+                  modify' (\m@MkModule{constants} -> m{constants=constants <> coerce (encode lit)}) -- FIXME use lenses?
                   pure (fromIntegral sz)
 
 newVar = error "newVar: @TODO"

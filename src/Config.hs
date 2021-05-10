@@ -1,16 +1,19 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell   #-}
 module Config where
 
 import           Data.ByteString.Char8 as BS (ByteString, drop, isPrefixOf,
-                                              pack, unpack, length)
+                                              length, pack, unpack)
 import           Data.Map              as Map (Map, fromList, (!?))
+import           Data.Maybe            (isJust)
 import           Data.String           (IsString (..))
+import           Lens.Micro            (ASetter', set)
 import           System.FilePath       (takeDirectory, takeFileName, (</>))
 import           Text.Printf           (printf)
+import           Utils                 (makeLenses')
 
-import Debug.Trace
-import Data.Maybe (isJust)
+import           Debug.Trace
 
 -- | represents what has to be compiled
 data Target = Target { fname :: String -- ^ filename
@@ -28,18 +31,25 @@ fromTarget Target{fpath, fname} = fpath </> fname
 -- | Dynamic Flags. Similar to haskell, they can be set by invocation (command-line),
 -- in the repl (or maybe per file with pragmas?)
 data DFlags = DFlags
-  { _rprint_static :: Bool
-  , _ddump_code    :: Bool
-  , _ddump_flags   :: Bool
+  { rprint_static :: Bool
+  , ddump_code    :: Bool
+  , ddump_flags   :: Bool
   } deriving (Eq, Show)
+makeLenses' ''DFlags
 
 all_flags :: [(FlagName, FlagType)]
 all_flags =
-  [ ("rprint-static", Switch (\s d@DFlags{_rprint_static} -> d{_rprint_static= parseSwitch s}))
-  , ("ddump-code"   , Switch (\s d@DFlags{_ddump_code}    -> d{_ddump_code= parseSwitch s}))
-  , ("ddump-flags"  , Switch (\s d@DFlags{_ddump_flags}   -> d{_ddump_flags= parseSwitch s}))
+  [ ("rprint-static", Switch (setSwitch _rprint_static))
+  , ("ddump-code"   , Switch (setSwitch _ddump_code))
+  , ("ddump-flags"  , Switch (setSwitch _ddump_flags))
   ]
   where
+    setSwitch :: ASetter' DFlags Bool -> FlagName -> DFlags -> DFlags
+    setSwitch l fl = set l (parseSwitch fl)
+    setOption :: ASetter' DFlags a -> (FlagName, ByteString) -> DFlags -> DFlags
+    setOption l (fl,arg) = set l (parseOption fl arg)
+
+    parseOption = undefined
     parseSwitch str | "--no-" `isPrefixOf` str = False
                     | "--" `isPrefixOf` str = True
                     | otherwise = error ("Config::flags::parseSwitch: flag not sanitized.")
@@ -58,9 +68,9 @@ toDFlags ss = go defaultDFlags ss where
 
 -- TODO: refactor by adding the default value in @all_flags@
 defaultDFlags :: DFlags
-defaultDFlags = DFlags { _rprint_static = True -- FIXME only for development
-                       , _ddump_code = False
-                       , _ddump_flags = False
+defaultDFlags = DFlags { rprint_static = True -- FIXME only for development
+                       , ddump_code = False
+                       , ddump_flags = False
                        }
 
 maybeToEither :: e -> Maybe a -> Either e a
@@ -75,7 +85,6 @@ getFlagName str | not ("--" `isPrefixOf` str) = error (printf "Config::getFlagNa
 data FlagType = Switch (ByteString -> DFlags -> DFlags)            -- ^ bool switch
               | Option  ((ByteString, ByteString) -> DFlags -> DFlags) -- ^ expects an option after the `--flag`
 
--- !TODO lenses would be ideal here
 -- ("name", FlagType)
 type FlagName = ByteString
 

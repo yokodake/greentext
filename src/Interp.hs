@@ -1,21 +1,25 @@
-{-# LANGUAGE UnboxedTuples #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE UnboxedTuples   #-}
 module Interp where
 
-import Data.ByteString (ByteString)
+import           Data.ByteString (ByteString)
 
-import Config(Target(..), DFlags, mkTarget)
-import Stack ( Stack )
+import           Config          (DFlags, Target (..), mkTarget)
+import           Stack           (Stack)
+import           Utils           (makeLenses')
 
 -- | should be like @GtcEnv@ except the target is optional.
 --   also contains the current environment (bindings from previous commands)
-data GtiEnv = GtiEnv { flags :: DFlags
-                     , target :: Maybe Target 
+data GtiEnv = GtiEnv { flags  :: DFlags
+                     , target :: Maybe Target
                      } deriving (Show)
 
--- | state of the VM 
+makeLenses' ''GtiEnv
+
+-- | state of the VM
 data GtiState = GtiState { code  :: {-# UNPACK #-} !ByteString
                          , ip    :: {-# UNPACK #-} !Int
-                         , stack :: {-# UNPACK #-} !Stack 
+                         , stack :: {-# UNPACK #-} !Stack
                          , ret   :: {-# UNPACK #-} !ByteString
                          } deriving Show
 

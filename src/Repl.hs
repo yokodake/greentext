@@ -1,34 +1,36 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE ViewPatterns          #-}
 module Repl where
 
-import Control.Monad.IO.Class (MonadIO (liftIO))
-import Control.Monad.State.Strict (MonadState(..), StateT (StateT), execStateT, evalStateT, modify)
-import Control.Monad.Trans (MonadTrans(lift))
-import Data.ByteString.Char8 (ByteString, pack, empty)
-import Data.Char (isSpace)
-import Data.Map.Strict ((!?), Map)
-import qualified Data.Map.Strict as M 
-import Data.Map.Strict ((!?))
-import Data.Functor (($>))
-import System.Console.Haskeline (InputT, getInputLine, runInputT, defaultSettings)
-import Text.Printf (printf)
-import qualified Data.ByteString as BW
-import qualified Data.ByteString.Builder as Bld
-import qualified Data.ByteString.Lazy as BL
+import           Control.Monad.IO.Class     (MonadIO (liftIO))
+import           Control.Monad.State.Strict (MonadState (..), StateT (StateT),
+                                             evalStateT, execStateT, modify)
+import           Control.Monad.Trans        (MonadTrans (lift))
+import qualified Data.ByteString            as BW
+import qualified Data.ByteString.Builder    as Bld
+import           Data.ByteString.Char8      (ByteString, empty, pack)
+import qualified Data.ByteString.Lazy       as BL
+import           Data.Char                  (isSpace)
+import           Data.Functor               (($>))
+import           Data.Map.Strict            (Map, (!?))
+import qualified Data.Map.Strict            as M
+import           Lens.Micro                 ((%~))
+import           System.Console.Haskeline   (InputT, defaultSettings,
+                                             getInputLine, runInputT)
+import           Text.Printf                (printf)
 
-import Ast (ReplAst (..))
-import Config
-import Interp
-import Parser (PError(..), parseReplLine)
-import Code
-import Data.Coerce (coerce)
-import Gtc (GtcM(..), GtcEnv, defaultGtcEnv)
-import Emit (emitExpr)
-import Debug (disassembleWithoutHeader)
+import           Ast                        (ReplAst (..))
+import           Code
+import           Config
+import           Data.Coerce                (coerce)
+import           Debug                      (disassembleWithoutHeader)
+import           Emit                       (emitExpr)
+import           Gtc                        (GtcEnv, GtcM (..), defaultGtcEnv)
+import           Interp
+import           Parser                     (PError (..), parseReplLine)
 
 class Monad m => MonadInput m where
   liftInput :: InputT IO a -> m a
@@ -57,7 +59,7 @@ repl env = (runInputT defaultSettings . flip evalStateT env) go
     stripSpace (x:xs) | isSpace x = stripSpace xs
                       | otherwise = x:xs
     isCommand (stripSpace -> (':':_)) = True
-    isCommand _       = False
+    isCommand _                       = False
     prompt = " # "
 
     go :: ReplM ()
@@ -75,7 +77,7 @@ repl env = (runInputT defaultSettings . flip evalStateT env) go
                    | otherwise -> liftInput $ getLines process input >> pure True
 
 process :: ReplAst -> IO ()
-process (RExp exp) = 
+process (RExp exp) =
   let env = defaultGtcEnv
       mod = MkModule (coerce empty) []
       toChunk addr builder = MkChunk "it" addr (BW.toStrict $ Bld.toLazyByteString $ builder)
@@ -90,12 +92,12 @@ quitRepl :: IO Bool
 quitRepl = (putStrLn "Leaving.") >> return False
 
 replCommand :: String -> ReplM Bool
-replCommand line = 
+replCommand line =
   case extractCommand line of
     Nothing -> msg line
     Just (cmd, args) -> case commands_map !? cmd of
       Nothing -> msg cmd
-      Just f -> f args
+      Just f  -> f args
   where msg s = liftIO (putStrLn (printf "unrecognized command: `%s`" s)) $> True
 
 
@@ -126,8 +128,8 @@ getLines f firstLine = go firstLine
                   | otherwise -> multiline (prev <> "\n" <> s)
 
 extractCommand :: String -> Maybe (String, [String])
-extractCommand (':':rest) = 
-  let hd [] = Nothing
+extractCommand (':':rest) =
+  let hd []     = Nothing
       hd (x:xs) = Just x
       splitSpace acc []       = acc `seq` acc
       splitSpace acc (' ':xs) = acc `seq` splitSpace acc xs
@@ -137,7 +139,7 @@ extractCommand (':':rest) =
       untilSpace (x:xs) | isSpace x = ([], xs)
                         | otherwise = case untilSpace xs of
                                         (y,ys) -> (x:y, ys)
-      ws = splitSpace [] rest 
+      ws = splitSpace [] rest
   in (,) <$> hd ws <*> pure (tail ws)
 extractCommand _ = error "no command"
 
@@ -155,7 +157,7 @@ commands =
     setFlag fl@(pack -> flb) = case flag_map !? (getFlagName flb) of
       Nothing -> liftIO $ putStrLn (printf "unrecognised flag `%s`" fl)
       Just (Option _) -> liftIO $ putStrLn "commands.setFlag.Option: Not Implemented Yet"
-      Just (Switch update) -> modify (\e@GtiEnv{flags} -> e{flags=update flb flags}) -- FIXME uses lenses
+      Just (Switch update) -> modify (_flags %~ update flb)
 
 commands_map :: M.Map String ([String] -> ReplM Bool)
 commands_map = M.fromList . map mkcmd $ commands
