@@ -11,7 +11,7 @@ import           Data.String           (IsString (..))
 import           Lens.Micro            (ASetter', set)
 import           System.FilePath       (takeDirectory, takeFileName, (</>))
 import           Text.Printf           (printf)
-import           Utils                 (makeLenses')
+import           Utils                 (makeLenses_)
 
 import           Debug.Trace
 
@@ -35,7 +35,7 @@ data DFlags = DFlags
   , ddump_code    :: Bool
   , ddump_flags   :: Bool
   } deriving (Eq, Show)
-makeLenses' ''DFlags
+makeLenses_ ''DFlags
 
 all_flags :: [(FlagName, FlagType)]
 all_flags =

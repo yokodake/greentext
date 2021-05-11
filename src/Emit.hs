@@ -5,33 +5,45 @@ import           Data.ByteString         as BS (length)
 import           Data.ByteString.Builder (toLazyByteString)
 import           Data.ByteString.Lazy    (toStrict)
 import           Data.Coerce
+import           Data.Word               (Word8)
 import           Prelude                 hiding (init, return)
+import           Text.Printf             (printf)
 
 import           Ast
 import           Code                    hiding (LInt, write)
 import           Gtc
+import Control.Monad.State.Strict (gets)
 
-emitVarDec :: Decl -> GtcM s e ()
+type EmitError = String
+type EmitState = Module
+type EmitM = GtcM EmitState String
+cModule :: EmitState -> Module
+cModule = id
+
+err :: String -> EmitM a
+err e = throwError e
+
+emitVarDec :: Decl -> EmitM ()
 emitVarDec (Var n e) = error "global var: @TODO"
 emitVarDec _         = error "emitVarDec: not a Var"
 
-emitFunDec :: Decl -> GtcM Module e ()
+emitFunDec :: Decl -> EmitM ()
 emitFunDec (Fun n ps b) = error "emitFunDec: @TODO"
 emitFunDec _            = error "emitFunDec: not a Fun"
 
-mkFunBinding :: Sym -> Int -> Chunk -> GtcM s e ()
+mkFunBinding :: Sym -> Int -> Chunk -> EmitM ()
 mkFunBinding = error "mkFunBinding: @TODO"
 
-genFun :: Sym -> GtcM s e ()
+genFun :: Sym -> EmitM ()
 genFun name = undefined
   where
     chunk name start bs = MkChunk {name, start, code = toStrict $ toLazyByteString bs}
 
 
-emitStmts :: [Stmt] -> GtcM Module e ()
+emitStmts :: [Stmt] -> EmitM ()
 emitStmts = mapM_ emitStmt
 
-emitStmt :: Stmt -> GtcM Module e ()
+emitStmt :: Stmt -> EmitM ()
 emitStmt node = case node of
   Exit             -> exit
   Print args       -> emitPrint args
@@ -44,7 +56,7 @@ emitStmt node = case node of
   Ret Nothing      -> ret
   Ret (Just e)     -> emitExpr e >> retTop
 
-emitWhile :: Expr -> [Stmt] -> GtcM Module e ()
+emitWhile :: Expr -> [Stmt] -> EmitM ()
 emitWhile e ss = mdo start <-label
                      emitExpr e   -- while e
                      brf end      -- {
@@ -53,107 +65,119 @@ emitWhile e ss = mdo start <-label
                      end <- label
                      pure ()
 
-emitCond :: Expr -> [Stmt] -> Maybe [Stmt] -> GtcM Module e ()
+emitCond :: Expr -> [Stmt] -> Maybe [Stmt] -> EmitM ()
 emitCond p c a = mdo emitExpr p
                      brf alt
                      emitStmts c
                      alt <- label
                      maybe (pure ()) emitStmts a
 
-emitExpr :: Expr -> GtcM Module e ()
+emitExpr :: Expr -> EmitM ()
 emitExpr e = case e of
-  Lit lit -> pushLit lit
+  Lit l -> lit l
   Ref var -> pushVar var
   RVal    -> pushRet
   Infix op l r -> do emitExpr l
                      emitExpr r
                      emitOp op
 
-emitOp :: String -> GtcM s e ()
-emitOp op = write $ case op of
-  "+"   -> Iadd
-  "*"   -> Imul
-  "-"   -> Imin
-  "/"   -> Idiv
-  "%"   -> Imod
-  "and" -> Iand
-  "or"  -> Ior
-  "=="  -> Ieq
-  "!="  -> Ineq
-  ">"   -> Igt
-  "<"   -> Ilt
-  ">="  -> Ige
-  "<="  -> Ile
-  _     -> error "emitOp: not an operator"
+emitOp :: String -> EmitM ()
+emitOp op = do
+  op <- case op of
+          "+"   -> pure Iadd
+          "*"   -> pure Imul
+          "-"   -> pure Imin
+          "/"   -> pure Idiv
+          "%"   -> pure Imod
+          "and" -> pure Iand
+          "or"  -> pure Ior
+          "=="  -> pure Ieq
+          "!="  -> pure Ineq
+          ">"   -> pure Igt
+          "<"   -> pure Ilt
+          ">="  -> pure Ige
+          "<="  -> pure Ile
+          x     -> err (printf "unrecognized operator `%s`" x)
+  write op
 
-emitPrint :: [Expr] -> GtcM s e ()
-emitPrint = undefined
+emitPrint :: [Expr] -> EmitM ()
+emitPrint args = do mapM_ emitExpr args
+                    write Iprint
+                    let len = Prelude.length args
+                    if len < fromIntegral (maxBound @Word8) then
+                      write (toWord8 len)
+                    else
+                      err ("too many args for Print")
 
-pushLit :: LitV -> GtcM Module e ()
-pushLit lit = case lit of
+  where toWord8 x = fromIntegral x :: Word8
+
+lit :: LitV -> EmitM ()
+lit l = case l of
   LStr _  -> undefined
   LDou _  -> undefined
-  LBoo b -> do addr <- newConst b
+  LBoo b -> do addr <- litAddr b
                write Ilit1
                write addr
-  LInt i -> do addr <- newConst i
+  LInt i -> do addr <- litAddr i
                write Ilit4
                write addr
 
 
 -- | adds a function to the env with name, param number and body
-mkFun :: Sym -> Int -> Chunk -> GtcM s e ()
+mkFun :: Sym -> Int -> Chunk -> EmitM ()
 mkFun = undefined
 
 -- | executes the action with the passed writer instead and returns that one
-with :: Chunk -> GtcM s e () -> GtcM s e Chunk
+with :: Chunk -> EmitM () -> EmitM Chunk
 with = undefined
 
 -- | generate a new constant
-newConst :: Marshal a => a -> GtcM Module e SAddr
-newConst lit = do let bs = encode lit
-                  sz <- BS.length . coerce . constants <$> get
-                  modify' (\m@MkModule{constants} -> m{constants=constants <> coerce (encode lit)}) -- FIXME use lenses?
-                  pure (fromIntegral sz)
+--
+-- @IMPROVEMENT eliminate duplicate literals
+litAddr :: Marshal a => a -> EmitM SAddr
+litAddr lit = do mod <- gets cModule 
+                 let (mod', addr) = insertStatic lit mod
+                 put mod'
+                 pure addr
 
 newVar = error "newVar: @TODO"
 pushVar = error "pushVar: @TODO"
 
 -- * Instructions
-exit :: GtcM s e ()
+exit :: EmitM ()
 exit = write Iexit
 {-# INLINE exit #-}
 
-pushRet :: GtcM s e ()
+pushRet :: EmitM ()
 pushRet = write IloadRet
 {-# INLINE pushRet #-}
 
-retTop :: GtcM s e ()
+retTop :: EmitM ()
 retTop = write Irettop
 {-# INLINE retTop #-}
 
-ret :: GtcM s e ()
+ret :: EmitM ()
 ret = write Iret
 {-# INLINE ret #-}
 
-pop :: GtcM s e ()
+pop :: EmitM ()
 pop = write Ipop
 {-# INLINE pop #-}
 
-store :: Sym -> GtcM s e ()
+store :: Sym -> EmitM ()
 store _ = do error "store: @TODO"
              write Istore
 
-print :: GtcM s e ()
+print :: EmitM ()
 print = error "print: @TODO"
 
-call :: Sym -> GtcM s e ()
+call :: Sym -> EmitM ()
 call = error "call: @TODO"
 
-brf :: IAddr -> GtcM s e ()
+brf :: IAddr -> EmitM ()
 brf a = do write Ibrf
            write a
 
-jmp :: IAddr -> GtcM s e ()
+jmp :: IAddr -> EmitM ()
 jmp a = do write Ijmp
            write a

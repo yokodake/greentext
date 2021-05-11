@@ -1,7 +1,5 @@
-{-# LANGUAGE FlexibleInstances
-           , KindSignatures
-           , MultiParamTypeClasses
-           , TypeApplications #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 -- |
 -- GreenText Compiler: environment and code gen monad.
@@ -29,22 +27,22 @@ module Gtc
     ) where
 
 -- import Control.Monad.Writer.Class
-import           Control.Applicative (liftA2)
-import           Control.Monad.Except (MonadError(..))
-import           Control.Monad.Fix (MonadFix(..))
-import           Control.Monad.Reader.Class (MonadReader(..), asks)
-import           Control.Monad.State.Class (MonadState(..), modify', modify)
-import qualified Data.ByteString as S
+import           Code                       hiding (write)
+import           Config                     (DFlags, Target, defaultDFlags,
+                                             mkTarget)
+import           Control.Applicative        (liftA2)
+import           Control.Monad.Except       (MonadError (..))
+import           Control.Monad.Fix          (MonadFix (..))
+import           Control.Monad.Reader.Class (MonadReader (..), asks)
+import           Control.Monad.State.Class  (MonadState (..), modify, modify')
+import qualified Data.ByteString            as S
 import           Data.ByteString.Builder
-import qualified Data.ByteString.Lazy as L
-import           Data.Coerce (coerce)
-import           Data.Word (Word16, Word8)
-import           Code hiding (write)
-import           Config (Target, DFlags, defaultDFlags, mkTarget)
+import qualified Data.ByteString.Lazy       as L
+import           Data.Coerce                (coerce)
 
 -- * Environment
 -- | Greentext compiler envrionment, context and other stuff
-data GtcEnv = GtcEnv { flags :: DFlags -- ^ settings & cmdline passed flags
+data GtcEnv = GtcEnv { flags  :: DFlags -- ^ settings & cmdline passed flags
                      , target :: Target -- ^ the file to be interpreted
                      } deriving (Show)
 defaultGtcEnv :: GtcEnv
@@ -61,7 +59,7 @@ newtype GtcM s e a =
 instance Functor (GtcM s e) where
   fmap f (GtcM m) = GtcM
     $ \r s i -> case m r s i of
-      Left e -> Left e
+      Left e             -> Left e
       Right (b, s, i, a) -> Right (b, s, i, f a)
   {-# INLINE fmap #-}
 
@@ -122,7 +120,7 @@ instance MonadFix (GtcM s e) where
                 in Right (b, s', i', a)
     where
       unEither (Right a) = a
-      unEither (Left e) = error "mfix: Left"
+      unEither (Left e)  = error "mfix: Left"
 
 {-- might not want that, since we'll have to update the IAddr, and Builders don't track sizes
  -- so, either we wrap around Builders and add size info, or we don't use Writer
@@ -145,13 +143,13 @@ class Write a where
   write :: a -> GtcM s e ()
   size :: a -> Int
 
-instance Write Word8 where
+instance Write Instr where
   size _ = 1
   write x = write_ (word8 x) 1
 instance Write OpCode where
   size _ = 1
   write = write . ctob
-instance Write [Word8] where
+instance Write [Instr] where
   size = length
   write xs = let bs = S.pack xs
              in bs `seq` write_ (byteString bs) (S.length bs)

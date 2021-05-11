@@ -22,6 +22,7 @@ newtype Stack = S ByteString
 
 pattern Stack :: ForeignPtr Word8 -> Int -> Stack
 pattern Stack fp len = S (BS fp len)
+{-# COMPLETE Stack #-}
 
 class Value a where
     push :: a -> Stack -> Stack

@@ -79,11 +79,11 @@ repl env = (runInputT defaultSettings . flip evalStateT env) go
 process :: ReplAst -> IO ()
 process (RExp exp) =
   let env = defaultGtcEnv
-      mod = MkModule (coerce empty) []
+      mod = MkModule (coerce empty) [] M.empty
       toChunk addr builder = MkChunk "it" addr (BW.toStrict $ Bld.toLazyByteString $ builder)
   in case runGtcM (emitExpr exp) env mod 0 of
   Left s -> putStrLn s
-  Right (builder, mod, _, _) -> BL.putStr $ disassembleWithoutHeader (constants mod) (toChunk 0 builder)
+  Right (builder, mod, _, _) -> BL.putStr $ disassembleWithoutHeader (static mod) (toChunk 0 builder)
 process _ = putStrLn "Not supported."
 
 isBlank = all isSpace

@@ -1,12 +1,4 @@
-{-# LANGUAGE AllowAmbiguousTypes        #-}
-{-# LANGUAGE BangPatterns               #-}
-{-# LANGUAGE BinaryLiterals             #-}
-{-# LANGUAGE DerivingStrategies         #-}
-{-# LANGUAGE DerivingVia                #-}
-{-# LANGUAGE GeneralisedNewtypeDeriving #-}
-{-# LANGUAGE NamedFieldPuns             #-}
-{-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE TypeApplications           #-}
+{-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE CPP                        #-}
 module Code where
 
@@ -15,20 +7,50 @@ import           Prelude         hiding (init)
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import           Data.Coerce
-import           Foreign         (Int16, Int32, Int64, Ptr, Storable, Word16,
-                                  Word8)
+import           Data.Int        (Int16, Int32, Int64)
+import           Data.Map.Strict as M (Map, empty, insert)
+import           Data.Word       (Word16, Word8)
+import           Foreign         (Storable (..))
 import qualified Foreign         as F
 import           GHC.IO          (unsafePerformIO)
 import           Text.Printf     (printf)
 
 import           Ast             (Sym)
+import           Utils           (makeLenses_, sizeOf, sizeof, castptr)
+import Lens.Micro ((%~), (&))
 
--- TODO : global vars
+-- * General Types
+-- ** Addresses
+type Address_t = Word16
 
--- * Chunks
-data Chunk = MkChunk { name  :: Sym    -- ^ chunk name ~ function name
+-- | instr. addr
+newtype IAddr = MkIAddr Address_t
+  deriving (Num, Storable) via Address_t
+instance Show IAddr where
+  show (MkIAddr x) = printf "%%0x%04x" x
+-- | addr in static mem.
+newtype SAddr = MkSAddr Address_t
+  deriving (Num, Storable) via Address_t
+instance Show SAddr where
+  show (MkSAddr x) = printf "*0x%04x" x
+
+-- | size of a static memory address
+sasize :: Int
+sasize = sizeof @SAddr
+
+-- | size of a instruction address
+iasize :: Int
+iasize = let (MkIAddr x) = undefined in sizeOf x
+
+-- | size of a data reference
+rsize :: Int
+rsize = sizeof @Address_t
+
+-- ** Chunks
+type Code = ByteString 
+data Chunk = MkChunk { name  :: !Sym    -- ^ chunk name ~ function name
                      , start :: !IAddr
-                     , code  :: !ByteString
+                     , code  :: !Code
                      }
 
 -- | literals
@@ -38,47 +60,47 @@ newtype SMem = MkSMem ByteString
 
 
 -- | \@TODO: global vars
-data Module = MkModule { constants :: !SMem    -- ^ static mem for literals
-                       , funcs     :: [Chunk]  -- ^ list of functions
+data Module = MkModule { static :: !SMem    -- ^ static mem for literals and globals
+                       , funcs  :: [Chunk]  -- ^ list of functions
+                       , globals :: Map String (SAddr, Code)
                        }
+makeLenses_ ''Module                       
 
 -- | initialize a new chunk
-init :: String -> IAddr -> Chunk
-init name start = MkChunk { name, start, code= mempty}
+mkChunk :: String -> IAddr -> Chunk
+mkChunk name start = MkChunk { name, start, code= mempty}
+
+mkModule :: SMem -> Module
+mkModule static = MkModule{static, funcs=[], globals=M.empty}
+
+insertStatic :: Marshal a => a -> Module -> (Module, SAddr)
+insertStatic lit mod =
+  let sz = (B.length . coerce . static) mod in
+  ( mod & _static %~ (<> coerce (encode lit))
+  , fromIntegral sz )
+
+insertGlobal :: String -> (SAddr -> Code) -> Module -> (Module, SAddr)
+insertGlobal gl mkInit mod =
+  let sz = (fromIntegral . B.length . coerce . static) mod
+      code = mkInit sz
+  in code `seq`
+    ( mod & _static %~ (<> nil) 
+          & _globals %~ insert gl (sz, code)
+    , sz )
+
+nil :: SMem
+nil = coerce (B.replicate rsize 0)
 
 -- * OPCODE
 type Instr = Word8
--- | instr. addr
-newtype IAddr = MkIAddr Word16
-  deriving Num via Word16
-instance Show IAddr where
-  show (MkIAddr x) = printf "%%0x%04x" x
--- | addr in static mem.
-newtype SAddr = MkSAddr Word16
-  deriving Num via Word16
-instance Show SAddr where
-  show (MkSAddr x) = printf "*0x%04x" x
-
-
--- | size of a static memory address
-sasize :: Int
-sasize = let (MkSAddr x) = undefined in F.sizeOf x
-
--- | size of a instruction address
-iasize :: Int
-iasize = let (MkIAddr x) = undefined in F.sizeOf x
-
--- | add a constant to the constants array
-addC :: Marshal a => a -> SMem -> SMem
-addC v sm = coerce B.append sm (encode v)
 
 #define OPCODE_TABLE(F) \
   F(=, Ipop    , {- ^ @POP [x]@ pop value from stack -}               , "POP"    , 0) \
   F(|, Iret    , {- ^ @RET    @ return form function -}               , "RET"    , 0) \
   F(|, Irettop , {- ^ @RET [x]@ return (and pops) top of the stack -} , "RETTOP" , 0) \
-  F(|, IloadRet,{- ^ @LDR    @ push return value on stack -}          , "LOADRET", 0) \
-  F(|, Iload  , {- ^ @LDS $x @ push slot (variables) on stack -}      , "LOAD"   , 0) \
-  F(|, Istore , {- ^ @STR    @ put top of stack in a slot (Var) -}    , "STORE"  , 0) \
+  F(|, IloadRet, {- ^ @LDR    @ push return value on stack -}         , "LOADRET", 0) \
+  F(|, Iload   , {- ^ @LDS $x @ push slot (variables) on stack -}     , "LOAD"   , 0) \
+  F(|, Istore  , {- ^ @STR    @ put top of stack in a slot (Var) -}   , "STORE"  , 0) \
 \
   F(|, Ilit1  , {- ^ @LIT *x@ 1 byte:  constant bool -}           , "LIT1" , sasize) \
   F(|, Ilit4  , {- ^ @LIT *x@ 4 bytes: constant signed integer -} , "LIT4" , sasize) \
@@ -103,8 +125,9 @@ addC v sm = coerce B.append sm (encode v)
   F(|, Ibrt   , {- ^ @BRT %p [x]@ branch if false -}     , "BRT", iasize) \
   F(|, Ijmp   , {- ^ @JMP %p    @ unconditional jump -}  , "JMP", iasize) \
 \
-  F(|, Icall  , {- ^ @CALL %p@ function call -}          , "CALL", iasize) \
-  F(|, Iexit  , {- ^ @EXIT@    exit program  -}          , "EXIT", 0)
+  F(|, Icall  , {- ^ @CALL %p@ function call -}          , "CALL" , iasize) \
+  F(|, Iexit  , {- ^ @EXIT@    exit program  -}          , "EXIT" , 0) \
+  F(|, Iprint , {- ^ @PRINT u8 [..]@ print -}            , "PRINT", 1)
 
 #define OPCODE_TYPE(d, dtor, comment, _1, _2) d dtor comment
 #define OPCODE_SHOW(_, dtor, _1, str, _2) show dtor = str;
@@ -137,7 +160,6 @@ ctob = fromIntegral . fromEnum
 btoc :: Instr -> OpCode
 btoc = toEnum . fromIntegral
 {-# INLINE btoc #-}
-
 
 -- | size of the value
 valSize :: OpCode -> Int
@@ -267,14 +289,4 @@ instance Enum TypeTag where
   toEnum 0b101 = LInt
   toEnum 0b110 = LDouble
   toEnum 0b111 = LString
-
--- * utilities
--- | reverse the type variables so the first type applied arg is @b@,
--- @a@ will almost always be inferrred from the function arg anyways.
-castptr :: forall b a. Ptr a -> Ptr b
-castptr = F.castPtr
-
--- | sizeof as a polymorphic variable instead, way better with @-XTypeApplications@
--- than passing a dummy term, also much more succint for some cases
-sizeof :: forall a. Storable a => Int
-sizeof = F.sizeOf (undefined :: a)
+  toEnum _     = error ("TypeTag.toEnum")

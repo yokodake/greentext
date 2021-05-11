@@ -3,10 +3,8 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE InstanceSigs #-}
-{-# OPTIONS_GHC -Wall -Wno-unused-imports #-}
+{-# OPTIONS_GHC -Wno-unused-imports #-}
 module Driver where
 
 import           Data.ByteString.Char8    as B (ByteString, pack, packCString, head, unpack)
