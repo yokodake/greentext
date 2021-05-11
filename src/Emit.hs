@@ -1,16 +1,13 @@
 {-# LANGUAGE RecursiveDo #-}
+{-# OPTIONS_GHC -Wno-unused-matches #-}
 module Emit where
 
-import           Data.ByteString         as BS (length)
-import           Data.ByteString.Builder (toLazyByteString)
-import           Data.ByteString.Lazy    (toStrict)
-import           Data.Coerce
 import           Data.Word               (Word8)
 import           Prelude                 hiding (init, return)
 import           Text.Printf             (printf)
 
 import           Ast
-import           Code                    hiding (LInt, write)
+import           Code                    hiding (LInt)
 import           Gtc
 import Control.Monad.State.Strict (gets)
 
@@ -33,12 +30,6 @@ emitFunDec _            = error "emitFunDec: not a Fun"
 
 mkFunBinding :: Sym -> Int -> Chunk -> EmitM ()
 mkFunBinding = error "mkFunBinding: @TODO"
-
-genFun :: Sym -> EmitM ()
-genFun name = undefined
-  where
-    chunk name start bs = MkChunk {name, start, code = toStrict $ toLazyByteString bs}
-
 
 emitStmts :: [Stmt] -> EmitM ()
 emitStmts = mapM_ emitStmt
@@ -165,7 +156,7 @@ pop = write Ipop
 {-# INLINE pop #-}
 
 store :: Sym -> EmitM ()
-store _ = do error "store: @TODO"
+store _ = do _ <- error "store: @TODO"
              write Istore
 
 print :: EmitM ()

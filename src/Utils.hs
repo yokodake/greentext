@@ -4,13 +4,14 @@ module Utils (module Utils, F.sizeOf, Storable) where
 
 import           Foreign                    (Ptr, Storable)
 import qualified Foreign                    as F
-import           Language.Haskell.TH.Syntax (mkName, nameBase)
-import           Lens.Micro                 (ASetter', set, (&), (.~))
+import           Language.Haskell.TH        (DecsQ, Name, mkName, nameBase)
+import           Lens.Micro                 ((&), (.~))
 import           Lens.Micro.TH              (DefName (TopName), lensField,
                                              lensRules, makeLensesWith)
 
 -- | like 'Lens.Micro.makeLenses' but generates lenses starting with @_@
 --   for fields that don't start with it.
+makeLenses_ :: Name -> DecsQ
 makeLenses_ = makeLensesWith
     $ lensRules
     & lensField .~ (\_ _ n -> case nameBase n of

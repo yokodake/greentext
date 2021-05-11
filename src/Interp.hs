@@ -4,7 +4,7 @@ module Interp where
 
 import           Data.ByteString (ByteString)
 
-import           Config          (DFlags, Target (..), mkTarget)
+import           Config          (DFlags, Target (..))
 import           Stack           (Stack)
 import           Utils           (makeLenses_)
 

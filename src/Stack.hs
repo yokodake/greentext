@@ -32,7 +32,7 @@ class Value a where
 push_bs :: ByteString -> Stack -> Stack
 push_bs (BS _ 0) s     = s
 push_bs bs (Stack _ 0) = S bs
-push_bs bs (S bs')     = S (bs' <> bs')
+push_bs bs (S bs')     = S (bs <> bs')
 
 -- | O(1) pop variable size elements in the form of a @ByteString@
 pop_bs :: Int -> Stack -> (# Stack, ByteString #)

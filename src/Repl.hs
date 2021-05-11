@@ -3,19 +3,20 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances  #-}
 {-# LANGUAGE ViewPatterns          #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 module Repl where
 
 import           Control.Monad.IO.Class     (MonadIO (liftIO))
-import           Control.Monad.State.Strict (MonadState (..), StateT (StateT),
-                                             evalStateT, execStateT, modify)
+import           Control.Monad.State.Strict (MonadState (..), StateT (..),
+                                             evalStateT, modify)
 import           Control.Monad.Trans        (MonadTrans (lift))
 import qualified Data.ByteString            as BW
 import qualified Data.ByteString.Builder    as Bld
-import           Data.ByteString.Char8      (ByteString, empty, pack)
+import           Data.ByteString.Char8      (empty, pack)
 import qualified Data.ByteString.Lazy       as BL
 import           Data.Char                  (isSpace)
 import           Data.Functor               (($>))
-import           Data.Map.Strict            (Map, (!?))
+import           Data.Map.Strict            ((!?))
 import qualified Data.Map.Strict            as M
 import           Lens.Micro                 ((%~))
 import           System.Console.Haskeline   (InputT, defaultSettings,
@@ -28,7 +29,7 @@ import           Config
 import           Data.Coerce                (coerce)
 import           Debug                      (disassembleWithoutHeader)
 import           Emit                       (emitExpr)
-import           Gtc                        (GtcEnv, GtcM (..), defaultGtcEnv)
+import           Gtc                        (GtcM (..), defaultGtcEnv)
 import           Interp
 import           Parser                     (PError (..), parseReplLine)
 
@@ -86,6 +87,7 @@ process (RExp exp) =
   Right (builder, mod, _, _) -> BL.putStr $ disassembleWithoutHeader (static mod) (toChunk 0 builder)
 process _ = putStrLn "Not supported."
 
+isBlank :: String -> Bool
 isBlank = all isSpace
 
 quitRepl :: IO Bool
@@ -130,7 +132,7 @@ getLines f firstLine = go firstLine
 extractCommand :: String -> Maybe (String, [String])
 extractCommand (':':rest) =
   let hd []     = Nothing
-      hd (x:xs) = Just x
+      hd (x:_) = Just x
       splitSpace acc []       = acc `seq` acc
       splitSpace acc (' ':xs) = acc `seq` splitSpace acc xs
       splitSpace acc (x:xs) = let (y, ys) = untilSpace (x:xs)

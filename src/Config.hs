@@ -4,10 +4,9 @@
 module Config where
 
 import           Data.ByteString.Char8 as BS (ByteString, drop, isPrefixOf,
-                                              length, pack, unpack)
+                                              length, unpack)
 import           Data.Map              as Map (Map, fromList, (!?))
 import           Data.Maybe            (isJust)
-import           Data.String           (IsString (..))
 import           Lens.Micro            (ASetter', set)
 import           System.FilePath       (takeDirectory, takeFileName, (</>))
 import           Text.Printf           (printf)
@@ -78,6 +77,7 @@ maybeToEither e = maybe (Left e) Right
 
 
 -- TODO handle invalid flag better
+getFlagName :: ByteString -> FlagName
 getFlagName str | not ("--" `isPrefixOf` str) = error (printf "Config::getFlagName: invalid FLAG `%s`" (unpack str))
                 | "--no-" `isPrefixOf` str = BS.drop (BS.length "--no-") str
                 | otherwise                = BS.drop (BS.length "--") str

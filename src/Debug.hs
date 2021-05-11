@@ -14,7 +14,8 @@ import qualified Data.ByteString.Lazy as L
 -- | print a module in humand readable format
 disassembleModule :: String -> Module -> L.ByteString
 disassembleModule mname MkModule{static, funcs} = 
-  output $ mapM_ (\chunk -> do { disass static chunk; endl }) funcs
+  output $ do string (printf "### MODULE %s ###\n\n" mname) 
+              mapM_ (\chunk -> do { disass static chunk; endl }) funcs
 
 -- | print a chunk in human readable format
 -- @TODO rewrite all of this: no String, a proper output stream, abstract more of it

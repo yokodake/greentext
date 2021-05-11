@@ -16,7 +16,7 @@ import           GHC.IO          (unsafePerformIO)
 import           Text.Printf     (printf)
 
 import           Ast             (Sym)
-import           Utils           (makeLenses_, sizeOf, sizeof, castptr)
+import           Utils           (makeLenses_, sizeof, castptr)
 import Lens.Micro ((%~), (&))
 
 -- * General Types

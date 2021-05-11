@@ -27,9 +27,6 @@ module Gtc
     ) where
 
 -- import Control.Monad.Writer.Class
-import           Code                       hiding (write)
-import           Config                     (DFlags, Target, defaultDFlags,
-                                             mkTarget)
 import           Control.Applicative        (liftA2)
 import           Control.Monad.Except       (MonadError (..))
 import           Control.Monad.Fix          (MonadFix (..))
@@ -39,6 +36,10 @@ import qualified Data.ByteString            as S
 import           Data.ByteString.Builder
 import qualified Data.ByteString.Lazy       as L
 import           Data.Coerce                (coerce)
+
+import           Code
+import           Config                     (DFlags, Target, defaultDFlags,
+                                             mkTarget)
 
 -- * Environment
 -- | Greentext compiler envrionment, context and other stuff
@@ -64,7 +65,7 @@ instance Functor (GtcM s e) where
   {-# INLINE fmap #-}
 
 instance Applicative (GtcM s e) where
-  pure a = GtcM $ \r s i -> Right (mempty, s, i, a)
+  pure a = GtcM $ \_ s i -> Right (mempty, s, i, a)
   {-# INLINE pure #-}
 
   (GtcM mf) <*> (GtcM ma) = GtcM
@@ -103,14 +104,14 @@ instance MonadReader GtcEnv (GtcM s e) where
   {-# INLINE local #-}
 
 instance MonadState s (GtcM s e) where
-  get = GtcM $ \r s i -> Right (mempty, s, i, s)
+  get = GtcM $ \_ s i -> Right (mempty, s, i, s)
   {-# INLINE get #-}
 
-  put s = GtcM $ \r _ i -> Right (mempty, s, i, ())
+  put s = GtcM $ \_ _ i -> Right (mempty, s, i, ())
   {-# INLINE put #-}
 
   state f = GtcM
-    $ \r s0 i -> let (a, s1) = f s0
+    $ \_ s0 i -> let (a, s1) = f s0
                  in Right (mempty, s1, i, a)
   {-# INLINE state #-}
 
@@ -120,7 +121,7 @@ instance MonadFix (GtcM s e) where
                 in Right (b, s', i', a)
     where
       unEither (Right a) = a
-      unEither (Left e)  = error "mfix: Left"
+      unEither (Left _)  = error "mfix: Left"
 
 {-- might not want that, since we'll have to update the IAddr, and Builders don't track sizes
  -- so, either we wrap around Builders and add size info, or we don't use Writer
@@ -137,7 +138,7 @@ instance MonadWriter ByteBuilder (GtcM s e) where
 
 -- | gets the current location in the bytebuilder
 label :: GtcM s e IAddr
-label = GtcM $ \r s i -> pure (mempty, s, i, i)
+label = GtcM $ \_ s i -> pure (mempty, s, i, i)
 
 class Write a where
   write :: a -> GtcM s e ()
@@ -173,4 +174,4 @@ instance Write SAddr where
 
 write_ :: ByteBuilder -> Int -> GtcM s e ()
 write_ bb len = GtcM
-  $ \r s i -> Right (bb, s, i + MkIAddr (fromIntegral len), ())
+  $ \_ s i -> Right (bb, s, i + MkIAddr (fromIntegral len), ())

@@ -1,4 +1,5 @@
 {
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 module Lexer
   ( Token(..)
   , scanTokens
@@ -7,7 +8,6 @@ module Lexer
 import Prelude hiding (Ordering(..))
 -- import AST
 import Control.Monad.Except
-import Debug.Trace
 import Data.Int (Int32)
 
 }
@@ -119,7 +119,7 @@ data Token
 strip :: String -> String
 strip ('"':xs) = go xs
   where go ['"'] = []
-        go (x:xs)  = go xs
+        go (_:xs)  = go xs
 
 alexEOF = EOF
 
@@ -127,11 +127,11 @@ scanTokens :: String -> Except String [Token]
 scanTokens str = go ('\0', [], str)
   where
     go :: AlexInput -> Except String [Token]
-    go inp@(_,bs,str) =
+    go inp@(_, _bs, str) =
       case alexScan inp 0 of
         AlexEOF -> return []
         AlexError (_, _, str) -> throwError $ "Invalid lexeme: " <> str
-        AlexSkip inp' len -> go inp'
+        AlexSkip inp' _len -> go inp'
         AlexToken inp' len act -> do
           let res = act (take len str)
           
