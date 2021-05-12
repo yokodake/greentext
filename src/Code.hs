@@ -4,6 +4,8 @@ module Code where
 
 import           Prelude         hiding (init)
 
+import           Data.ByteString.Short (ShortByteString)
+import qualified Data.ByteString.Short as SB
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import           Data.Coerce
@@ -76,7 +78,7 @@ mkModule static = MkModule{static, funcs=[], globals=M.empty}
 insertStatic :: Marshal a => a -> Module -> (Module, SAddr)
 insertStatic lit mod =
   let sz = (B.length . coerce . static) mod in
-  ( mod & _static %~ (<> coerce (encode lit))
+  ( mod & _static %~ (<> coerce (SB.fromShort $ encode lit))
   , fromIntegral sz )
 
 insertGlobal :: String -> (SAddr -> Code) -> Module -> (Module, SAddr)
@@ -178,14 +180,15 @@ isLit _     = False
 {-# INLINE isLit #-}
 
 -- ** Marshalling
+-- | we might benefit from 'Data.ByteString.Short.shortByteString'
 class Marshal a where
   encode' :: a -> [Word8]
   decode' :: [Word8] -> a
 
-  encode :: a -> ByteString
-  encode = B.pack . encode'
-  decode :: ByteString -> a
-  decode = decode' . B.unpack
+  encode :: a -> ShortByteString
+  encode = SB.pack . encode'
+  decode :: ShortByteString -> a
+  decode = decode' . SB.unpack
   {-# MINIMAL encode', decode' #-}
 
 instance Marshal Double where
@@ -207,63 +210,63 @@ instance Marshal Bool where
   decode' [_] = True
   decode' _   = error ("Code.Marshal.decode' not one byte.")
 
-encode_w8 :: Word8 -> ByteString
+encode_w8 :: Word8 -> ShortByteString
 encode_w8' :: Word8 -> [Word8]
-encode_w16 :: Word16 -> ByteString
+encode_w16 :: Word16 -> ShortByteString
 encode_w16' :: Word16 -> [Word8]
-encode_w8 = B.singleton
-encode_w16 = B.pack . encode_w16'
+encode_w8 = SB.pack . (:[])
+encode_w16 = SB.pack . encode_w16'
 encode_w8' = pure
 encode_w16' !w = unsafePerformIO $ F.with w (F.peekArray (sizeof @Word16) . castptr @Word8)
-decode_w8 :: ByteString -> Word8
+decode_w8 :: ShortByteString -> Word8
 decode_w8' :: [Word8] -> Word8
-decode_w16 :: ByteString -> Word16
+decode_w16 :: ShortByteString -> Word16
 decode_w16' :: [Word8] -> Word16
-decode_w8 = B.head
+decode_w8 = head . SB.unpack
 decode_w8' = head
-decode_w16 = decode_w16' . B.unpack
+decode_w16 = decode_w16' . SB.unpack
 decode_w16' ws = unsafePerformIO $ F.withArray ws (F.peek . castptr @Word16)
 
-encode_f32  :: Float -> ByteString
+encode_f32  :: Float -> ShortByteString
 encode_f32' :: Float -> [Word8]
-encode_f64  :: Double -> ByteString
+encode_f64  :: Double -> ShortByteString
 encode_f64' :: Double -> [Word8]
-encode_f32 = B.pack . encode_f32'
-encode_f64 = B.pack . encode_f64'
+encode_f32 = SB.pack . encode_f32'
+encode_f64 = SB.pack . encode_f64'
 encode_f32' !f = unsafePerformIO $ F.with f (F.peekArray (sizeof @Float)  . castptr @Word8)
 encode_f64' !d = unsafePerformIO $ F.with d (F.peekArray (sizeof @Double) . castptr @Word8)
 
-encode_i16  :: Int16 -> ByteString
+encode_i16  :: Int16 -> ShortByteString
 encode_i16' :: Int16 -> [Word8]
-encode_i32  :: Int32 -> ByteString
+encode_i32  :: Int32 -> ShortByteString
 encode_i32' :: Int32 -> [Word8]
-encode_i64  :: Int64 -> ByteString
+encode_i64  :: Int64 -> ShortByteString
 encode_i64' :: Int64 -> [Word8]
-encode_i16  = B.pack . encode_i16'
-encode_i32  = B.pack . encode_i32'
-encode_i64  = B.pack . encode_i64'
+encode_i16  = SB.pack . encode_i16'
+encode_i32  = SB.pack . encode_i32'
+encode_i64  = SB.pack . encode_i64'
 encode_i16' !i = unsafePerformIO $ F.with i (F.peekArray (sizeof @Int16) . castptr @Word8)
 encode_i32' !i = unsafePerformIO $ F.with i (F.peekArray (sizeof @Int32) . castptr @Word8)
 encode_i64' !i = unsafePerformIO $ F.with i (F.peekArray (sizeof @Int64) . castptr @Word8)
 
-decode_f32  :: ByteString -> Float
+decode_f32  :: ShortByteString -> Float
 decode_f32' :: [Word8] -> Float
-decode_f64  :: ByteString -> Double
+decode_f64  :: ShortByteString -> Double
 decode_f64' :: [Word8] -> Double
-decode_f32 = decode_f32' . B.unpack
-decode_f64 = decode_f64' . B.unpack
+decode_f32 = decode_f32' . SB.unpack
+decode_f64 = decode_f64' . SB.unpack
 decode_f32' !ws = unsafePerformIO $ F.withArray ws (F.peek . castptr @Float )
 decode_f64' !ws = unsafePerformIO $ F.withArray ws (F.peek . castptr @Double)
 
-decode_i16  :: ByteString -> Int16
+decode_i16  :: ShortByteString -> Int16
 decode_i16' :: [Word8] -> Int16
-decode_i32  :: ByteString -> Int32
+decode_i32  :: ShortByteString -> Int32
 decode_i32' :: [Word8] -> Int32
-decode_i64  :: ByteString -> Int64
+decode_i64  :: ShortByteString -> Int64
 decode_i64' :: [Word8] -> Int64
-decode_i16 = decode_i16' . B.unpack
-decode_i32 = decode_i32' . B.unpack
-decode_i64 = decode_i64' . B.unpack
+decode_i16 = decode_i16' . SB.unpack
+decode_i32 = decode_i32' . SB.unpack
+decode_i64 = decode_i64' . SB.unpack
 decode_i16' ws = unsafePerformIO $ F.withArray ws (F.peek . castptr @Int16)
 decode_i32' ws = unsafePerformIO $ F.withArray ws (F.peek . castptr @Int32)
 decode_i64' ws = unsafePerformIO $ F.withArray ws (F.peek . castptr @Int64)

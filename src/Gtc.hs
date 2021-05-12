@@ -34,7 +34,7 @@ import           Control.Monad.Reader.Class (MonadReader (..), asks)
 import           Control.Monad.State.Class  (MonadState (..), modify, modify')
 import qualified Data.ByteString            as S
 import           Data.ByteString.Builder    (Builder, byteString,
-                                             lazyByteString, word8)
+                                             lazyByteString, word8, shortByteString)
 import qualified Data.ByteString.Lazy       as L
 import           Data.Coerce                (coerce)
 

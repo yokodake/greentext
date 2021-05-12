@@ -68,8 +68,8 @@ showLit :: Word16 -> Int -> SMem -> String
 showLit addr size (MkSMem bs)= printf "0x%04x   (%s)" addr (v_str)
   where
     v_str = show' . B.take size . B.drop (fromIntegral addr) $ bs
-    show' = case size of
-              8 -> show . decode @Double
-              4 -> show . decode @Int32
-              1 -> show . decode @Word8
+    show' = case size of -- FIXME
+              8 -> show . decode' @Double . B.unpack
+              4 -> show . decode' @Int32  . B.unpack
+              1 -> show . decode' @Word8  . B.unpack
               _ -> ("???" <>) . show
