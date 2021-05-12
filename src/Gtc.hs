@@ -33,7 +33,8 @@ import           Control.Monad.Fix          (MonadFix (..))
 import           Control.Monad.Reader.Class (MonadReader (..), asks)
 import           Control.Monad.State.Class  (MonadState (..), modify, modify')
 import qualified Data.ByteString            as S
-import           Data.ByteString.Builder
+import           Data.ByteString.Builder    (Builder, byteString,
+                                             lazyByteString, word8)
 import qualified Data.ByteString.Lazy       as L
 import           Data.Coerce                (coerce)
 
@@ -117,8 +118,10 @@ instance MonadState s (GtcM s e) where
 
 instance MonadFix (GtcM s e) where
   mfix f = GtcM
-    $ \r s i -> let (b, s', i', a) = unEither (runGtcM (f a) r s i)
-                in Right (b, s', i', a)
+    $ \r s i ->
+      let x = runGtcM (f a) r s i
+          (_, _, _, a) = unEither x
+      in x
     where
       unEither (Right a) = a
       unEither (Left _)  = error "mfix: Left"
