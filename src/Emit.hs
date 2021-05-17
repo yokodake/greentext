@@ -1,15 +1,16 @@
 {-# LANGUAGE RecursiveDo #-}
-{-# OPTIONS_GHC -Wno-unused-matches #-}
+{-# OPTIONS_GHC -Wno-unused-do-bind #-}
 module Emit where
 
-import           Data.Word               (Word8)
-import           Prelude                 hiding (init, return)
-import           Text.Printf             (printf)
+import           Control.Monad.State.Strict (gets)
+import           Data.Map                   (member)
+import           Data.Word                  (Word8)
+import           Prelude                    hiding (init, return)
+import           Text.Printf                (printf)
 
 import           Ast
-import           Code                    hiding (LInt)
-import           Gtc
-import Control.Monad.State.Strict (gets)
+import           Code                       hiding (LInt)
+import           Gtc hiding (local)
 
 type EmitError = String
 type EmitState = Module
@@ -21,7 +22,7 @@ err :: String -> EmitM a
 err e = throwError e
 
 emitVarDec :: Decl -> EmitM ()
-emitVarDec (Var n e) = error "global var: @TODO"
+emitVarDec (Var n e) = global n e
 emitVarDec _         = error "emitVarDec: not a Var"
 
 emitFunDec :: Decl -> EmitM ()
@@ -38,8 +39,8 @@ emitStmt :: Stmt -> EmitM ()
 emitStmt node = case node of
   Exit             -> exit
   Print args       -> emitPrint args
-  Ass var (Just e) -> newVar var >> emitExpr e >> store var >> pop
-  Ass var Nothing  -> newVar var
+  Ass var (Just e) -> local var >> emitExpr e >> store var >> pop
+  Ass var Nothing  -> local var
   While p ss       -> emitWhile p ss
   For {}           -> undefined
   Cond p c a       -> emitCond p c a
@@ -72,7 +73,7 @@ emitExpr e = case e of
                      emitExpr r
                      emitOp op
 
-emitOp :: String -> EmitM ()
+emitOp :: Sym -> EmitM ()
 emitOp op = do
   op <- case op of
           "+"   -> pure Iadd
@@ -126,12 +127,29 @@ with = undefined
 --
 -- @IMPROVEMENT eliminate duplicate literals
 litAddr :: Marshal a => a -> EmitM SAddr
-litAddr lit = do mod <- gets cModule 
+litAddr lit = do mod <- gets cModule
                  let (mod', addr) = insertStatic lit mod
                  put mod'
                  pure addr
 
-newVar = error "newVar: @TODO"
+global :: Sym -> Maybe Expr -> EmitM ()
+global n m_e = do mod <- gets cModule
+                  case n `member` globals mod of
+                    True -> fail
+                    False  -> do let code = maybe initNil assign m_e
+                                 put . fst $ insertGlobal n code mod
+  where
+    fail = err (printf "global variable `%s` already declared" n)
+
+local :: Sym -> EmitM ()
+local = error "local: @TODO"
+
+initNil :: SAddr -> Code
+initNil = error "assign: @TODO"
+
+assign :: Expr -> SAddr -> Code
+assign _ _ = error "assign: @TODO"
+
 pushVar = error "pushVar: @TODO"
 
 -- * Instructions
@@ -154,6 +172,7 @@ ret = write Iret
 pop :: EmitM ()
 pop = write Ipop
 {-# INLINE pop #-}
+{-# OPTIONS_GHC -Wno-unused-do-bind #-}
 
 store :: Sym -> EmitM ()
 store _ = do _ <- error "store: @TODO"

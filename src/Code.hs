@@ -11,6 +11,7 @@ import qualified Data.ByteString as B
 import           Data.Coerce
 import           Data.Int        (Int16, Int32, Int64)
 import           Data.Map.Strict as M (Map, empty, insert)
+import           Data.Vector     (Vector)
 import           Data.Word       (Word16, Word8)
 import           Foreign         (Storable (..))
 import qualified Foreign         as F
@@ -64,9 +65,11 @@ newtype SMem = MkSMem ByteString
 -- | \@TODO: global vars
 data Module = MkModule { static :: !SMem    -- ^ static mem for literals and globals
                        , funcs  :: [Chunk]  -- ^ list of functions
-                       , globals :: Map String (SAddr, Code)
+                       , globals :: Map Sym (SAddr, Code)
                        }
 makeLenses_ ''Module                       
+
+data Scope = MkScope !(Vector Sym)
 
 -- | initialize a new chunk
 mkChunk :: String -> IAddr -> Chunk

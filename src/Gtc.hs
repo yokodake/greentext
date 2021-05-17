@@ -41,6 +41,7 @@ import           Data.Coerce                (coerce)
 import           Code
 import           Config                     (DFlags, Target, defaultDFlags,
                                              mkTarget)
+import Utils (sizeof)
 
 -- * Environment
 -- | Greentext compiler envrionment, context and other stuff
@@ -120,7 +121,7 @@ instance MonadFix (GtcM s e) where
   mfix f = GtcM
     $ \r s i ->
       let x = runGtcM (f a) r s i
-          (_, _, _, a) = unEither x
+          ~(_, _, _, a) = unEither x
       in x
     where
       unEither (Right a) = a
@@ -148,7 +149,7 @@ class Write a where
   size :: a -> Int
 
 instance Write Instr where
-  size _ = 1
+  size _ = sizeof @Instr
   write x = write_ (word8 x) 1
 instance Write OpCode where
   size _ = 1
@@ -169,11 +170,11 @@ instance Write L.ByteString where
   size = fromIntegral . L.length
   write bs = write_ (lazyByteString bs) (size bs)
 instance Write IAddr where
-  size _ = 2
-  write = liftA2 write_ (byteString . coerce encode_w16) size
+  size _ = sizeof @IAddr
+  write = liftA2 write_ (shortByteString . coerce encode_w16) size
 instance Write SAddr where
-  size _ = 2
-  write = liftA2 write_ (byteString . coerce encode_w16) size
+  size _ = sizeof @SAddr 
+  write = liftA2 write_ (shortByteString . coerce encode_w16) size
 
 write_ :: ByteBuilder -> Int -> GtcM s e ()
 write_ bb len = GtcM
